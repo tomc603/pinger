@@ -3,78 +3,56 @@ package main
 import (
 	"log"
 	"net"
-	"os"
+	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
 
+type destination struct {
+	name string
+	network string
+	data []byte
+}
+
 const (
 	ProtoICMP = 1
 	ProtoICMPv6 = 58
+	SenderID = 121
 )
 
-func ping(names chan string, wg *sync.WaitGroup) {
+func ping(destinations chan destination, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	v6Sender, err := icmp.ListenPacket("udp6", "::")
-	if err != nil {
-		log.Fatal(err)
-	}
-	v4Sender, err := icmp.ListenPacket("udp4", "0.0.0.0")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer v6Sender.Close()
-	defer v4Sender.Close()
-	log.Println("ping started.")
-
-	echoRequestBody := icmp.Echo{
-		ID: os.Getpid() & 0xffff,
-		Seq: 1,
-		Data: []byte("ICMPTeST"),
-	}
-
-	for addr := range names {
-		v6Addr, err := net.ResolveIPAddr("ip6", addr)
-		if err != nil {
-			switch err.(type) {
-			case *net.DNSError:
-				e := err.(*net.DNSError)
-				if e.IsTimeout {
-					log.Fatalf("DNS Timeout: %#v", e.Name)
-				} else if e.IsTemporary {
-					log.Fatalf("DNS Temporary Failure: %#v", e)
-				} else {
-					log.Fatalf("DNS Error: %#v", e)
-				}
-			case *net.AddrError:
-				log.Printf("No v6 Address: '%s'. %s", err.(*net.AddrError).Addr, err.(*net.AddrError).Err)
-			default:
-				log.Fatalf("Unexpected error: %#v", err)
-			}
-		} else {
-			log.Printf("v6 Address: %v", v6Addr)
-			echoRequestMessage := icmp.Message{
-				Type: ipv6.ICMPTypeEchoRequest,
-				Code: 0,
-				Body: &echoRequestBody,
-			}
-
-			echoRequest, err := echoRequestMessage.Marshal(nil)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			if _, err := v6Sender.WriteTo(echoRequest, &net.UDPAddr{IP: v6Addr.IP}); err != nil {
-				log.Fatal(err)
-			}
+	for dest := range destinations {
+		listenAddress := "0.0.0.0"
+		listenNetType := "ip4"
+		echoRequestBody := icmp.Echo{
+			ID: SenderID << 8 | 0x0000 + 1,
+			Seq: 1,
+			Data: []byte("ICMPTeST"),
+		}
+		echoRequestMessage := icmp.Message{
+			Type: ipv4.ICMPTypeEcho,
+			Code: 0,
+			Body: &echoRequestBody,
 		}
 
-		v4Addr, err := net.ResolveIPAddr("ip4", addr)
+		if strings.HasSuffix(dest.network, "6") {
+			listenAddress = "::"
+			listenNetType = "ip6"
+			echoRequestMessage.Type = ipv6.ICMPTypeEchoRequest
+		}
+
+		conn, err := icmp.ListenPacket(dest.network, listenAddress)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		destAddr, err := net.ResolveIPAddr(listenNetType, dest.name)
 		if err != nil {
 			switch err.(type) {
 			case *net.DNSError:
@@ -87,24 +65,20 @@ func ping(names chan string, wg *sync.WaitGroup) {
 					log.Fatalf("DNS Error: %#v", e)
 				}
 			case *net.AddrError:
-				log.Printf("No v4 Address: '%s'. %s", err.(*net.AddrError).Addr, err.(*net.AddrError).Err)
+				log.Printf("No %s Address: '%s'. %s",
+					dest.network,
+					err.(*net.AddrError).Addr, err.(*net.AddrError).Err)
 			default:
 				log.Fatalf("Unexpected error: %#v", err)
 			}
 		} else {
-			log.Printf("v4 Address: %v", v4Addr)
-			echoRequestMessage := icmp.Message{
-				Type: ipv4.ICMPTypeEcho,
-				Code: 0,
-				Body: &echoRequestBody,
-			}
-
+			log.Printf("Address: %v", destAddr)
 			echoRequest, err := echoRequestMessage.Marshal(nil)
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			if _, err := v4Sender.WriteTo(echoRequest, &net.UDPAddr{IP: v4Addr.IP}); err != nil {
+			if _, err := conn.WriteTo(echoRequest, &net.UDPAddr{IP: destAddr.IP}); err != nil {
 				log.Fatal(err)
 			}
 		}
@@ -178,15 +152,14 @@ func v6Listener(wg *sync.WaitGroup) {
 	}
 }
 func main() {
-	names := []string{
-		"www.reddit.com",
-		"google-public-dns-a.google.com",
-		"www.google.com",
-		"www.yahoo.com",
-		"www.amazon.com",
+	names := []destination{
+		{name: "www.reddit.com", network: "udp4", data: []byte("TeStDaTA")},
+		{name: "google-public-dns-a.google.com", network: "udp6", data: []byte("TesTdaTa")},
+		{name: "www.google.com", network: "udp6", data: []byte("TEsTDaTA")},
+		{name: "www.yahoo.com", network: "udp4", data: []byte("teSTdaTA")},
+		{name: "www.amazon.com", network: "udp4", data: []byte("tEsTdATa")},
 	}
-
-	namech := make(chan string, 100)
+	namech := make(chan destination, 100)
 
 	pingWG := sync.WaitGroup{}
 	receiveWG := sync.WaitGroup{}
@@ -200,6 +173,7 @@ func main() {
 
 	for _, name := range names {
 		namech <- name
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	close(namech)

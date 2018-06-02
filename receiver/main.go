@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -226,11 +228,7 @@ var metrics *Metrics = new(Metrics)
 
 func main() {
 	var stop bool = false
-
-	metrics.Lock()
-	metrics.startTime = time.Now()
-	metrics.Unlock()
-
+	receiveWG := sync.WaitGroup{}
 	sigch := make(chan os.Signal, 5)
 	stopch := make(chan bool)
 
@@ -240,9 +238,17 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGUSR1)
 
-	receiveWG := sync.WaitGroup{}
-	receiveWG.Add(2)
+	metrics.Lock()
+	metrics.startTime = time.Now()
+	metrics.Unlock()
 
+	db, err := sql.Open("sqlite3", "./db.sqlite3")
+	if err != nil {
+		log.Fatalf("ERROR: %s\n", err)
+	}
+	defer db.Close()
+
+	receiveWG.Add(2)
 	go v6Listener(stopch, &receiveWG)
 	go v4Listener(stopch, &receiveWG)
 

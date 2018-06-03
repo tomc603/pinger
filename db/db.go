@@ -15,7 +15,7 @@
  *
  */
 
-package sql
+package db
 
 import (
 	"database/sql"

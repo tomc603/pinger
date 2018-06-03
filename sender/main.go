@@ -198,6 +198,7 @@ func ping(destinations chan *Destination, stopch chan bool, wg *sync.WaitGroup) 
 
 			//log.Printf("Received dispatched destination: %v\n", dest)
 
+			// TODO: Prepend probe sending location, host, and time into the message payload.
 			echoRequestBody := icmp.Echo{
 				ID:   SenderID<<8 | 0x0000 + 1,
 				Seq:  seq,

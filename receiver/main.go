@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/tomc603/pinger/sql"
 	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
@@ -159,6 +160,7 @@ func v4Listener(stopch chan bool, wg *sync.WaitGroup) {
 				metrics.Addv4Bytes(uint(n))
 
 				// TODO: Decode the message, compare the data payload and record the receipt
+				// TODO: Decode probe sending location, host, and time from the message payload.
 				echoReply := receiveMessage.Body.(*icmp.Echo)
 				log.Printf("ID %d, Seq: %d, From: %s\n", echoReply.ID, echoReply.Seq, peer)
 			}
@@ -216,6 +218,7 @@ func v6Listener(stopch chan bool, wg *sync.WaitGroup) {
 				metrics.Addv6Bytes(uint(n))
 
 				// TODO: Decode the message, compare the data payload and record the receipt
+				// TODO: Decode probe sending location, host, and time from the message payload.
 				echoReply := receiveMessage.Body.(*icmp.Echo)
 				log.Printf("ID %d, Seq: %d, From: %s\n", echoReply.ID, echoReply.Seq, peer)
 			}

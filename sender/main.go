@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/tomc603/pinger/data"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -19,7 +20,7 @@ const (
 	SenderID    = 121
 )
 
-func ping(destinations chan *Destination, stopch chan bool, wg *sync.WaitGroup) {
+func ping(destinations chan *data.Destination, stopch chan bool, wg *sync.WaitGroup) {
 	var stop = false
 	var seq = 0
 	defer wg.Done()
@@ -61,13 +62,13 @@ func ping(destinations chan *Destination, stopch chan bool, wg *sync.WaitGroup) 
 
 			// TODO: Prepend probe sending location, host, and time into the message payload.
 			bodyBuffer := new(bytes.Buffer)
-			magicData, magicErr := MagicV1.Encode()
+			magicData, magicErr := data.MagicV1.Encode()
 			if magicErr != nil {
 				log.Printf("WARN: Could not encode Magic value. %s\n", magicErr)
 			}
 			bodyBuffer.Write(magicData)
 
-			body := Body{
+			body := data.Body{
 				Timestamp: time.Now().UnixNano(),
 				Site: 101,
 				Host: 62,
@@ -92,7 +93,7 @@ func ping(destinations chan *Destination, stopch chan bool, wg *sync.WaitGroup) 
 				Body: &echoRequestBody,
 			}
 
-			if dest.Protocol == ProtoUDP6 {
+			if dest.Protocol == data.ProtoUDP6 {
 				v6 = true
 				conn = v6conn
 				listenNetType = "ip6"
@@ -170,19 +171,19 @@ func main() {
 	metrics.startTime = time.Now()
 	metrics.Unlock()
 
-	destinations := []*Destination{
-		{Address: "www.reddit.com", Protocol: ProtoUDP4, Interval: 1500, Data: []byte("TeStDaTA"), Active:true},
-		//{Address: "google-public-dns-a.google.com", Protocol: ProtoUDP6, Interval: 1000, Data: []byte("TesTdaTa"), Active:true},
-		//{Address: "www.google.com", Protocol: ProtoUDP6, Interval: 750, Data: []byte("TEsTDaTA"), Active:true},
-		{Address: "www.yahoo.com", Protocol: ProtoUDP4, Interval: 5000, Data: []byte("teSTdaTA"), Active:true},
-		{Address: "www.amazon.com", Protocol: ProtoUDP4, Interval: 10000, Data: []byte("tEsTdATa"), Active:true},
-		{Address: "1.1.1.1", Protocol: ProtoUDP4, Interval: 2000, Data: []byte("tEsTdATa"), Active:false},
-		{Address: "localhost", Protocol: ProtoUDP4, Interval: 500, Data: []byte("tEsTdATa"), Active:true},
-		//{Address: "::1", Protocol: ProtoUDP6, Interval: 500, Data: []byte("tEsTdATa"), Active:true},
+	destinations := []*data.Destination{
+		{Address: "www.reddit.com", Protocol: data.ProtoUDP4, Interval: 1500, Data: []byte("TeStDaTA"), Active:true},
+		//{Address: "google-public-dns-a.google.com", Protocol: data.ProtoUDP6, Interval: 1000, Data: []byte("TesTdaTa"), Active:true},
+		//{Address: "www.google.com", Protocol: data.ProtoUDP6, Interval: 750, Data: []byte("TEsTDaTA"), Active:true},
+		{Address: "www.yahoo.com", Protocol: data.ProtoUDP4, Interval: 5000, Data: []byte("teSTdaTA"), Active:true},
+		{Address: "www.amazon.com", Protocol: data.ProtoUDP4, Interval: 10000, Data: []byte("tEsTdATa"), Active:true},
+		{Address: "1.1.1.1", Protocol: data.ProtoUDP4, Interval: 2000, Data: []byte("tEsTdATa"), Active:false},
+		{Address: "localhost", Protocol: data.ProtoUDP4, Interval: 500, Data: []byte("tEsTdATa"), Active:true},
+		//{Address: "::1", Protocol: data.ProtoUDP6, Interval: 500, Data: []byte("tEsTdATa"), Active:true},
 	}
 
 	sigch := make(chan os.Signal, 5)
-	namech := make(chan *Destination, 100)
+	namech := make(chan *data.Destination, 100)
 	stopch := make(chan bool)
 
 	signal.Notify(sigch,

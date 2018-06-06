@@ -12,12 +12,13 @@ import (
 	"unsafe"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/tomc603/pinger/data"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
 
-func v4Listener(stopch chan bool, resultchan chan Result, wg *sync.WaitGroup) {
+func v4Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGroup) {
 	var stop = false
 	defer wg.Done()
 
@@ -33,7 +34,7 @@ func v4Listener(stopch chan bool, resultchan chan Result, wg *sync.WaitGroup) {
 			break
 		}
 
-		err := conn.SetDeadline(time.Now().Add(IODeadline))
+		err := conn.SetDeadline(time.Now().Add(data.IODeadline))
 		if err != nil {
 			log.Fatalf("FATAL: Error setting I/O deadline on v4 interface: %s\n", err)
 		}
@@ -54,13 +55,13 @@ func v4Listener(stopch chan bool, resultchan chan Result, wg *sync.WaitGroup) {
 				continue
 			}
 
-			receiveMessage, err := icmp.ParseMessage(ProtoICMP, receiveBuffer[:n])
+			receiveMessage, err := icmp.ParseMessage(data.ProtoICMP, receiveBuffer[:n])
 			if err != nil {
 				metrics.Addv4ParseFailed(1)
 				log.Printf("ERROR: %s\n", err)
 			}
 
-			result := Result{
+			result := data.Result{
 				TimeStamp: time.Now().UnixNano(),
 				Address: peer.String(),
 			}
@@ -73,9 +74,9 @@ func v4Listener(stopch chan bool, resultchan chan Result, wg *sync.WaitGroup) {
 				// TODO: Decode the message, compare the data payload and record the receipt
 				// TODO: Decode probe sending location, host, and time from the message payload.
 				echoReply := receiveMessage.Body.(*icmp.Echo)
-				if ValidateMagic(echoReply.Data[0:unsafe.Sizeof(MagicV1)]) {
-					var echoBody Body
-					err := echoBody.Decode(echoReply.Data[unsafe.Sizeof(MagicV1):unsafe.Sizeof(echoBody)+1])
+				if data.ValidateMagic(echoReply.Data[0:unsafe.Sizeof(data.MagicV1)]) {
+					var echoBody data.Body
+					err := echoBody.Decode(echoReply.Data[unsafe.Sizeof(data.MagicV1):unsafe.Sizeof(echoBody)+1])
 					if err == nil {
 						result.ReceiveSite = echoBody.Site
 						result.ReceiveHost = echoBody.Host
@@ -95,7 +96,7 @@ func v4Listener(stopch chan bool, resultchan chan Result, wg *sync.WaitGroup) {
 	log.Println("Ping v4Listener stopped.")
 }
 
-func v6Listener(stopch chan bool, resultchan chan Result, wg *sync.WaitGroup) {
+func v6Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGroup) {
 	var stop = false
 	defer wg.Done()
 
@@ -111,7 +112,7 @@ func v6Listener(stopch chan bool, resultchan chan Result, wg *sync.WaitGroup) {
 			break
 		}
 
-		err := conn.SetDeadline(time.Now().Add(IODeadline))
+		err := conn.SetDeadline(time.Now().Add(data.IODeadline))
 		if err != nil {
 			log.Fatalf("FATAL: Error setting I/O deadline on v6 interface: %s\n", err)
 		}
@@ -132,13 +133,13 @@ func v6Listener(stopch chan bool, resultchan chan Result, wg *sync.WaitGroup) {
 				continue
 			}
 
-			receiveMessage, err := icmp.ParseMessage(ProtoICMPv6, receiveBuffer[:n])
+			receiveMessage, err := icmp.ParseMessage(data.ProtoICMPv6, receiveBuffer[:n])
 			if err != nil {
 				metrics.Addv6ParseFailed(1)
 				log.Printf("ERROR: %s\n", err)
 			}
 
-			result := Result{
+			result := data.Result{
 				TimeStamp: time.Now().UnixNano(),
 				Address: peer.String(),
 			}
@@ -163,7 +164,7 @@ func v6Listener(stopch chan bool, resultchan chan Result, wg *sync.WaitGroup) {
 	log.Println("Ping v6Listener stopped.")
 }
 
-func resultWriter(resultchan chan Result, sqldb *sql.DB, wg *sync.WaitGroup) {
+func resultWriter(resultchan chan data.Result, sqldb *sql.DB, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	for result := range resultchan {
@@ -183,7 +184,7 @@ func main() {
 	receiveWG := sync.WaitGroup{}
 	resultWG := sync.WaitGroup{}
 
-	resultch := make(chan Result, 100)
+	resultch := make(chan data.Result, 100)
 	sigch := make(chan os.Signal, 5)
 	stopch := make(chan bool)
 

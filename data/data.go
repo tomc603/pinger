@@ -61,7 +61,7 @@ func (r *Magic) Encode() ([]byte, error) {
 
 	err := binary.Write(buf, DataOrder, r)
 	if err != nil {
-		fmt.Printf("ERROR: Unable to Encode Magic: %s. Value %v\n", err, r)
+		log.Printf("ERROR: Unable to Encode Magic: %s. Value %v\n", err, r)
 		return nil, err
 	}
 
@@ -93,7 +93,7 @@ func (r *Body) Decode(data []byte) error {
 	buf := bytes.NewReader(data)
 
 	if err := binary.Read(buf, DataOrder, r); err != nil {
-		fmt.Printf("ERROR: Unable to Decode Body. %s\n", err)
+		log.Printf("ERROR: Unable to Decode Body. %s\n", err)
 		return err
 	}
 	return nil
@@ -104,7 +104,7 @@ func (r *Body) Encode() ([]byte, error) {
 
 	err := binary.Write(buf, DataOrder, r)
 	if err != nil {
-		fmt.Printf("ERROR: Unable to Encode Body. %s\n", err)
+		log.Printf("ERROR: Unable to Encode Body. %s\n", err)
 		return nil, err
 	}
 

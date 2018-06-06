@@ -567,9 +567,9 @@ func BatchResultWriter(results []*Result, sqldb *sql.DB) error {
 			result.DataMatch)
 
 		if err != nil {
-			log.Printf("ERROR: executing Result transaction. %s\n", err)
+			log.Printf("ERROR: executing batch Result transaction. %s\n", err)
 			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Printf("ERROR: rolling back Result transaction. %s.\n", rbErr)
+				log.Printf("ERROR: rolling back batch Result transaction. %s.\n", rbErr)
 			}
 
 			return err

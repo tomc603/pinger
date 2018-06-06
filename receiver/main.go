@@ -71,9 +71,10 @@ func v4Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGrou
 				metrics.Addv4Received(1)
 				metrics.Addv4Bytes(uint(n))
 
-				// TODO: Decode the message, compare the data payload and record the receipt
-				// TODO: Decode probe sending location, host, and time from the message payload.
+				// TODO: Compare the data payload and record match / no match in the receipt
 				echoReply := receiveMessage.Body.(*icmp.Echo)
+
+				// Magic number means we have embedded data
 				if data.ValidateMagic(echoReply.Data[0:unsafe.Sizeof(data.MagicV1)]) {
 					var echoBody data.Body
 					err := echoBody.Decode(echoReply.Data[unsafe.Sizeof(data.MagicV1):unsafe.Sizeof(echoBody)+1])
@@ -149,9 +150,20 @@ func v6Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGrou
 				metrics.Addv6Received(1)
 				metrics.Addv6Bytes(uint(n))
 
-				// TODO: Decode the message, compare the data payload and record the receipt
-				// TODO: Decode probe sending location, host, and time from the message payload.
+				// TODO: Compare the data payload and record match / no match in the receipt
 				echoReply := receiveMessage.Body.(*icmp.Echo)
+
+				// Magic number means we have embedded data
+				if data.ValidateMagic(echoReply.Data[0:unsafe.Sizeof(data.MagicV1)]) {
+					var echoBody data.Body
+					err := echoBody.Decode(echoReply.Data[unsafe.Sizeof(data.MagicV1):unsafe.Sizeof(echoBody)+1])
+					if err == nil {
+						result.ReceiveSite = echoBody.Site
+						result.ReceiveHost = echoBody.Host
+						result.RTT = uint32(time.Unix(0, result.TimeStamp).Sub(time.Unix(0, echoBody.Timestamp)) / time.Millisecond)
+					}
+				}
+
 				result.ID = uint32(echoReply.ID)
 				result.Sequence = uint16(echoReply.Seq)
 				result.Code = uint16(receiveMessage.Code)
@@ -169,10 +181,10 @@ func resultWriter(resultchan chan data.Result, sqldb *sql.DB, wg *sync.WaitGroup
 
 	for result := range resultchan {
 		log.Printf("%s\n", result.String())
-		//err := result.Commit(sqldb)
-		//if err != nil {
-		//	log.Printf("ERROR: Would not commit result %v.\n", result)
-		//}
+		err := result.Commit(sqldb)
+		if err != nil {
+			log.Printf("ERROR: Could not commit result %v. %s\n", result, err)
+		}
 	}
 }
 
@@ -203,6 +215,17 @@ func main() {
 		log.Fatalf("ERROR: %s\n", err)
 	}
 	defer sqldb.Close()
+
+	// Create tables if they don't exist.
+	if err := data.CreateSourcesTable(sqldb); err != nil {
+		log.Fatalf("ERROR: Sources table could not be created. %s.\n", err)
+	}
+	if err := data.CreateDestinationsTable(sqldb); err != nil {
+		log.Fatalf("ERROR: Destinations table could not be created. %s.\n", err)
+	}
+	if err := data.CreateResultsTable(sqldb); err != nil {
+		log.Fatalf("ERROR: Results table could not be created. %s.\n", err)
+	}
 
 	// sources := db.GetSources(sqldb)
 	// destinations := db.GetDestinations(sqldb)

@@ -537,7 +537,7 @@ func GetResults(db *sql.DB) []Result {
 	return results
 }
 
-func BatchResultWriter(results []Result, sqldb *sql.DB) error {
+func BatchResultWriter(results []*Result, sqldb *sql.DB) error {
 	// Given a collection of Result struct, commit them as a single
 	// batch in a single begin/end tran instead of as individual
 	// transactions

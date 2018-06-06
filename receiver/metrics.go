@@ -33,6 +33,8 @@ type Metrics struct {
 	v6ReceiveFailed uint
 	v6ParseFailed   uint
 	v6Bytes         uint
+	dbBatchCommits  uint
+	dbSingleCommits uint
 	startTime     time.Time
 }
 

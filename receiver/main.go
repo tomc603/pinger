@@ -18,6 +18,8 @@ import (
 	"golang.org/x/net/ipv6"
 )
 
+const ResultBatchSize = 10
+
 func v4Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGroup) {
 	var stop = false
 	defer wg.Done()
@@ -130,14 +132,14 @@ func v6Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGrou
 				continue
 			} else if err != nil {
 				metrics.Addv4ReceiveFailed(1)
-				log.Printf("ERROR: %#v\n", err)
+				log.Printf("ERROR: reading from connection to buffer. %s\n", err)
 				continue
 			}
 
 			receiveMessage, err := icmp.ParseMessage(data.ProtoICMPv6, receiveBuffer[:n])
 			if err != nil {
 				metrics.Addv6ParseFailed(1)
-				log.Printf("ERROR: %s\n", err)
+				log.Printf("ERROR: parsing ICMP message. %s\n", err)
 			}
 
 			result := data.Result{
@@ -177,15 +179,35 @@ func v6Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGrou
 }
 
 func resultWriter(resultchan chan data.Result, sqldb *sql.DB, wg *sync.WaitGroup) {
+	var resultBuf []*data.Result
 	defer wg.Done()
 
+	log.Println("Ping resultWriter started.")
 	for result := range resultchan {
 		log.Printf("%s\n", result.String())
-		err := result.Commit(sqldb)
-		if err != nil {
-			log.Printf("ERROR: Could not commit result %v. %s\n", result, err)
+		if len(resultBuf) >= ResultBatchSize {
+			err := data.BatchResultWriter(resultBuf, sqldb)
+			if err != nil {
+				// Commit each Result individually so we save as much data as possible.
+				log.Printf("ERROR: Could not commit Result batch. %s.\n", err)
+				for _, r := range resultBuf {
+					if ce := r.Commit(sqldb); ce != nil {
+						log.Printf("ERROR: Could not commit Result %#v. %s.\n", r, ce)
+					} else {
+						metrics.dbSingleCommits += 1
+					}
+				}
+			} else {
+				metrics.dbBatchCommits += 1
+			}
+
+			// Empty the result buffer.
+			resultBuf = []*data.Result{}
+		} else {
+			resultBuf = append(resultBuf, &result)
 		}
 	}
+	log.Println("Ping resultWriter stopped.")
 }
 
 var metrics = new(Metrics)
@@ -263,7 +285,9 @@ func main() {
 	close(stopch)
 	receiveWG.Wait()
 
-	// Tell the result processor function to stop, and wait for it.
+	// Wait until all of the receivers have stopped and returned,
+	// then stop the result processor. There shouldn't be a race here,
+	// but I'm being cautious nonetheless.
 	close(resultch)
 	resultWG.Wait()
 

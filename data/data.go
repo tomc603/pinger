@@ -149,27 +149,28 @@ type Source struct {
 }
 
 func (r *Source) String() string {
-	return fmt.Sprintf("Source ID: %d - Address: %s\n", r.SourceID, r.Address)
+	return fmt.Sprintf("Location: %d, Host: %d, Source ID: %d, Address: %s\n",
+		r.SourceLocation, r.SourceHost,r.SourceID, r.Address)
 }
 
 func (r *Source) Commit(db *sql.DB) error {
 	sqlstmnt := `INSERT INTO sources(location, host, sourceid, address) VALUES(?, ?, ?, ?)`
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf("ERROR beginning Source transaction. %s\n", err)
+		log.Printf("ERROR: beginning Source transaction. %s\n", err)
 		return err
 	}
 
 	stmt, err := tx.Prepare(sqlstmnt)
 	if err != nil {
-		log.Printf("ERROR preparing Source transaction. %s\n", err)
+		log.Printf("ERROR: preparing Source transaction. %s\n", err)
 		return err
 	}
 	defer stmt.Close()
 
 	_, err = stmt.Exec(r.SourceID, r.Address)
 	if err != nil {
-		log.Printf("ERROR executing Source transaction. %s\n", err)
+		log.Printf("ERROR: executing Source transaction. %s\n", err)
 		return err
 	}
 	tx.Commit()
@@ -199,7 +200,7 @@ func GetSources(db *sql.DB) []Source {
 
 	rows, err := db.Query(sqlstmnt)
 	if err != nil {
-		log.Printf("ERROR querying sources. %s\n", err)
+		log.Printf("ERROR: querying sources. %s\n", err)
 		return nil
 	}
 	defer rows.Close()
@@ -208,7 +209,7 @@ func GetSources(db *sql.DB) []Source {
 		s := Source{}
 		err = rows.Scan(&s.SourceLocation, &s.SourceHost, &s.SourceID, &s.Address)
 		if err != nil {
-			log.Printf("ERROR querying sources. %s\n", err)
+			log.Printf("ERROR: querying sources. %s\n", err)
 			return nil
 		}
 		sources = append(sources, s)
@@ -216,7 +217,7 @@ func GetSources(db *sql.DB) []Source {
 
 	err = rows.Err()
 	if err != nil {
-		log.Printf("ERROR querying sources. %s\n", err)
+		log.Printf("ERROR: querying sources. %s\n", err)
 		return nil
 	}
 
@@ -227,7 +228,7 @@ func GetSources(db *sql.DB) []Source {
  * Destinations - Database table 'destinations', used to store probe endpoints and parameters.
  * The 'active' field is used to determine whether or not a destination should be
  * probed or skipped during the probe loop.
- * TODO: Potential memory optimization- Remove Destination from slice if active is false.
+ * TODO: Potential optimization- Select Destinations where active is true only.
  *
  * The 'address' field is not unique, and should not be collapsed into single
  * Destination instances when read from the database since parameters could be
@@ -237,7 +238,6 @@ func GetSources(db *sql.DB) []Source {
  *
  * An 'interval' is specified in milliseconds, and we should probably define a minimum to
  * make sure probes aren't abused.
- * TODO: Limit to a safe minimum on SELECT.
  *
  * Currently, 'timeout' is not enforced since there's no good way to inform a listener
  * that a probe has been sent, or that a received probe should be ignored or marked as late.
@@ -245,11 +245,10 @@ func GetSources(db *sql.DB) []Source {
  * The 'ttl' field isn't enforced currently. When it is, it may be null, which means we
  * shouldn't specify a value to the probe sender. Otherwise, this specifies the hop limit
  * for a probe.
- * TODO: Enforce TTL if specified, limit to a sane maximum and minimum on SELECT.
+ * TODO: Enforce TTL if specified.
  *
  * 'data' is a BLOB ([]byte) field that contains the exact data to be placed into a probe's
  * payload. If the field is NULL, we shouldn't populate the payload at all.
- * TODO: Limit the maximum size of 'data', trim extra bytes on SELECT.
  */
 type Destination struct {
 	Last     int64
@@ -293,20 +292,20 @@ func (r *Destination) Commit(db *sql.DB) error {
 
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf("ERROR: beginning Source transaction. %s\n", err)
+		log.Printf("ERROR: beginning Destination transaction. %s\n", err)
 		return err
 	}
 
 	stmt, err := tx.Prepare(sqlstmnt)
 	if err != nil {
-		log.Printf("ERROR preparing Source transaction. %s\n", err)
+		log.Printf("ERROR: preparing Destination transaction. %s\n", err)
 		return err
 	}
 	defer stmt.Close()
 
 	_, err = stmt.Exec(r.Active, r.Address, r.Protocol, r.Interval, r.Timeout, r.TTL, r.Data)
 	if err != nil {
-		log.Printf("ERROR executing Source transaction. %s\n", err)
+		log.Printf("ERROR: executing Destination transaction. %s\n", err)
 		return err
 	}
 	tx.Commit()
@@ -455,25 +454,29 @@ func (r *Result) String() string {
 }
 
 func (r *Result) Commit(db *sql.DB) error {
-	sqlstmnt := `INSERT INTO results(rtime, address, rtype, rcode, rid, rseq, datamatch)
-		VALUES(?, ?, ?, ?, ?, ?, ?)`
+	sqlstmnt := `INSERT INTO results(rtime, address, rsite, rhost, rtt, rtype, rcode, rid, rseq, datamatch)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf("ERROR beginning Source transaction. %s\n", err)
+		log.Printf("ERROR: beginning Result transaction. %s\n", err)
 		return err
 	}
 
 	stmt, err := tx.Prepare(sqlstmnt)
 	if err != nil {
-		log.Printf("ERROR preparing Source transaction. %s\n", err)
+		log.Printf("ERROR: preparing Result transaction. %s\n", err)
 		return err
 	}
 	defer stmt.Close()
 
 	_, err = stmt.Exec(r.TimeStamp, r.Address, r.Type, r.Code, r.ID, r.Sequence, r.DataMatch)
 	if err != nil {
-		log.Printf("ERROR executing Source transaction. %s\n", err)
+		log.Printf("ERROR: executing Result transaction. %s\n", err)
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("ERROR: rolling back Result transaction. %s.\n", rbErr)
+		}
+
 		return err
 	}
 	tx.Commit()
@@ -484,8 +487,11 @@ func (r *Result) Commit(db *sql.DB) error {
 func CreateResultsTable(db *sql.DB) error {
 	sqlstmnt := `CREATE TABLE IF NOT EXISTS results (
 		id INTEGER NOT NULL PRIMARY KEY,
-		address TEXT NOT NULL,
 		rtime TIMESTAMP NOT NULL,
+		address TEXT NOT NULL,
+		rsite INTEGER NOT NULL,
+		rhost INTEGER NOT NULL,
+		rtt INTEGER NOT NULL,
 		rtype INTEGER NOT NULL,
 		rcode INTEGER NOT NULL,
 		rid INTEGER NOT NULL,
@@ -502,21 +508,21 @@ func CreateResultsTable(db *sql.DB) error {
 
 func GetResults(db *sql.DB) []Result {
 	var results []Result
-	sqlstmnt := `SELECT address, rtime, rtype, rcode, rid, rseq, datamatch FROM results`
+	sqlstmnt := `SELECT rtime, address, rsite, rhost, rtt, rtype, rcode, rid, rseq, datamatch FROM results`
 
 	rows, err := db.Query(sqlstmnt)
 	if err != nil {
-		log.Printf("ERROR querying results. %s\n", err)
+		log.Printf("ERROR: querying Results. %s\n", err)
 		return nil
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		r := Result{}
-		err = rows.Scan(&r.Address, &r.TimeStamp, &r.Type,
-			&r.Code, &r.ID, &r.Sequence, &r.DataMatch)
+		err = rows.Scan(&r.TimeStamp, &r.Address, &r.ReceiveSite, &r.ReceiveHost, &r.RTT,
+			&r.Type, &r.Code, &r.ID, &r.Sequence, &r.DataMatch)
 		if err != nil {
-			log.Printf("ERROR querying results. %s\n", err)
+			log.Printf("ERROR: querying Results. %s\n", err)
 			return nil
 		}
 		results = append(results, r)
@@ -524,7 +530,7 @@ func GetResults(db *sql.DB) []Result {
 
 	err = rows.Err()
 	if err != nil {
-		log.Printf("ERROR querying results. %s\n", err)
+		log.Printf("ERROR: querying Results. %s\n", err)
 		return nil
 	}
 

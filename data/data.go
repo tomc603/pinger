@@ -536,3 +536,46 @@ func GetResults(db *sql.DB) []Result {
 
 	return results
 }
+
+func batchResultWriter(results []Result, sqldb *sql.DB) error {
+	// Given a collection of Result struct, commit them as a single
+	// batch in a single begin/end tran instead of as individual
+	// transactions
+	sqlstmnt := `INSERT INTO results(rtime, address, rsite, rhost, rtt, rtype, rcode, rid, rseq, datamatch)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	tx, err := sqldb.Begin()
+	if err != nil {
+		log.Printf("ERROR: beginning batch Result transaction. %s\n", err)
+		return err
+	}
+
+	stmt, err := tx.Prepare(sqlstmnt)
+	if err != nil {
+		log.Printf("ERROR: preparing batch Result transaction. %s\n", err)
+		return err
+	}
+	defer stmt.Close()
+
+	for _, result := range results {
+		_, err = stmt.Exec(result.TimeStamp,
+			result.Address,
+			result.Type,
+			result.Code,
+			result.ID,
+			result.Sequence,
+			result.DataMatch)
+
+		if err != nil {
+			log.Printf("ERROR: executing Result transaction. %s\n", err)
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("ERROR: rolling back Result transaction. %s.\n", rbErr)
+			}
+
+			return err
+		}
+	}
+
+	tx.Commit()
+	return nil
+}

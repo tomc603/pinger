@@ -1,3 +1,4 @@
+# Ignore basic types
 *.exe
 *.exe~
 *.dll
@@ -6,3 +7,10 @@
 .idea/
 *.test
 *.out
+
+# Ignore compiled output
+receiver/receiver
+sender/sender
+
+# Ignore Databases
+*.sqlite3

@@ -1,12 +1,11 @@
 package main
 
 import (
-	"fmt"
+	"bytes"
 	"log"
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -17,150 +16,12 @@ import (
 )
 
 const (
-	ProtoICMP   = 1
-	ProtoICMPv6 = 58
 	SenderID    = 121
 )
 
-type DestinationMetrics struct {
-	v4Sent       uint
-	v4Failed     uint
-	v4Bytes      uint
-	v6Sent       uint
-	v6Failed     uint
-	v6Bytes      uint
-	dnsError     uint
-	addrError    uint
-}
-
-type Metrics struct {
-	sync.RWMutex
-	v4Sent       uint
-	v4Failed     uint
-	v4Bytes      uint
-	v6Sent       uint
-	v6Failed     uint
-	v6Bytes      uint
-	emptyDest    uint
-	dnsTimeout   uint
-	dnsTempFail  uint
-	dnsError     uint
-	addrError    uint
-	unknownError uint
-	startTime    time.Time
-	destMetrics  map[string]DestinationMetrics
-}
-
-type Destination struct {
-	name     string
-	protocol string
-	data     []byte
-	interval int64
-	last     time.Time
-}
-
-func (m *Metrics) Addv4Sent(i uint) {
-	m.Lock()
-	m.v4Sent += i
-	m.Unlock()
-}
-
-func (m *Metrics) Addv4Failed(i uint) {
-	m.Lock()
-	m.v4Failed += i
-	m.Unlock()
-}
-
-func (m *Metrics) Addv4Bytes(i uint) {
-	m.Lock()
-	m.v4Bytes += i
-	m.Unlock()
-}
-
-func (m *Metrics) Addv6Sent(i uint) {
-	m.Lock()
-	m.v6Sent += i
-	m.Unlock()
-}
-
-func (m *Metrics) Addv6Failed(i uint) {
-	m.Lock()
-	m.v6Failed += i
-	m.Unlock()
-}
-
-func (m *Metrics) Addv6Bytes(i uint) {
-	m.Lock()
-	m.v6Bytes += i
-	m.Unlock()
-}
-
-func (m *Metrics) AddEmptyDest(i uint) {
-	m.Lock()
-	m.emptyDest += i
-	m.Unlock()
-}
-
-func (m *Metrics) AddDnsTimeout(i uint) {
-	m.Lock()
-	m.dnsTimeout += i
-	m.Unlock()
-}
-
-func (m *Metrics) AddDnsTempFail(i uint) {
-	m.Lock()
-	m.dnsTempFail += i
-	m.Unlock()
-}
-
-func (m *Metrics) AddDnsError(i uint) {
-	m.Lock()
-	m.dnsError += i
-	m.Unlock()
-}
-
-func (m *Metrics) AddAddressError(i uint) {
-	m.Lock()
-	m.addrError += i
-	m.Unlock()
-}
-
-func (m *Metrics) AddUnknownError(i uint) {
-	m.Lock()
-	m.unknownError += i
-	m.Unlock()
-}
-
-func (m *Metrics) String() string {
-	m.RLock()
-	defer m.RUnlock()
-	return fmt.Sprintf("Uptime: %v\n" +
-		"IPv4 sent: %d\n" +
-		"IPv4 failed: %d\n" +
-		"IPv4 bytes: %d\n" +
-		"IPv6 sent: %d\n" +
-		"IPv6 failed: %d\n" +
-		"IPv6 bytes: %d\n" +
-		"Total sent: %d\n" +
-		"Total failed: %d\n" +
-		"Total bytes: %d\n" +
-		"Empty Destination: %d\n" +
-		"DNS timeouts: %d\n" +
-		"DNS temporary failures: %d\n" +
-		"DNS errors: %d\n" +
-		"Address errors: %d\n" +
-		"Unknown errors: %d\n",
-		time.Since(m.startTime),
-		m.v4Sent, m.v4Failed, m.v4Bytes,
-		m.v6Sent, m.v6Failed, m.v6Bytes,
-		m.v4Sent+m.v6Sent, m.v4Failed + m.v6Failed, m.v4Bytes + m.v6Bytes,
-		m.emptyDest, m.dnsTimeout, m.dnsTempFail, m.dnsError,
-		m.addrError, m.unknownError)
-}
-
 func ping(destinations chan *Destination, stopch chan bool, wg *sync.WaitGroup) {
-	var stop bool = false
-	var seq int = 0
+	var stop = false
+	var seq = 0
 	defer wg.Done()
 
 	// Setup connections so we aren't constantly creating and tearing them down
@@ -184,11 +45,11 @@ func ping(destinations chan *Destination, stopch chan bool, wg *sync.WaitGroup) 
 
 		select {
 		case dest := <-destinations:
-			var v6 bool = false
-			var listenNetType string = "ip4"
+			var v6 = false
+			var listenNetType = "ip4"
 			conn := v4conn
 
-			if dest == nil || dest.name == "" || dest.protocol == "" {
+			if dest == nil || dest.Address == "" || dest.Protocol == 0 {
 				// Because we've closed the channel, the pointer to a Destination could be a nil pointer
 				// or the Destination could be empty/meaningless due to data error.
 				metrics.AddEmptyDest(1)
@@ -199,10 +60,31 @@ func ping(destinations chan *Destination, stopch chan bool, wg *sync.WaitGroup) 
 			//log.Printf("Received dispatched destination: %v\n", dest)
 
 			// TODO: Prepend probe sending location, host, and time into the message payload.
+			bodyBuffer := new(bytes.Buffer)
+			magicData, magicErr := MagicV1.Encode()
+			if magicErr != nil {
+				log.Printf("WARN: Could not encode Magic value. %s\n", magicErr)
+			}
+			bodyBuffer.Write(magicData)
+
+			body := Body{
+				Timestamp: time.Now().UnixNano(),
+				Site: 101,
+				Host: 62,
+			}
+			bodyData, bodyErr := body.Encode()
+			if bodyErr != nil || magicErr != nil {
+				bodyBuffer.Reset()
+				log.Printf("WARN: Skipping diagnostic payload.")
+			} else {
+				bodyBuffer.Write(bodyData)
+			}
+
+			bodyBuffer.Write(dest.Data)
 			echoRequestBody := icmp.Echo{
 				ID:   SenderID<<8 | 0x0000 + 1,
 				Seq:  seq,
-				Data: dest.data,
+				Data: bodyBuffer.Bytes(),
 			}
 			echoRequestMessage := icmp.Message{
 				Type: ipv4.ICMPTypeEcho,
@@ -210,14 +92,14 @@ func ping(destinations chan *Destination, stopch chan bool, wg *sync.WaitGroup) 
 				Body: &echoRequestBody,
 			}
 
-			if strings.HasSuffix(dest.protocol, "6") {
+			if dest.Protocol == ProtoUDP6 {
 				v6 = true
 				conn = v6conn
 				listenNetType = "ip6"
 				echoRequestMessage.Type = ipv6.ICMPTypeEchoRequest
 			}
 
-			destAddr, err := net.ResolveIPAddr(listenNetType, dest.name)
+			destAddr, err := net.ResolveIPAddr(listenNetType, dest.Address)
 			if err != nil {
 				switch err.(type) {
 				case *net.DNSError:
@@ -235,7 +117,7 @@ func ping(destinations chan *Destination, stopch chan bool, wg *sync.WaitGroup) 
 				case *net.AddrError:
 					metrics.AddAddressError(1)
 					log.Printf("ERROR: No %s Address: '%s'. %s",
-						dest.protocol,
+						listenNetType,
 						err.(*net.AddrError).Addr, err.(*net.AddrError).Err)
 				default:
 					metrics.AddUnknownError(1)
@@ -251,7 +133,7 @@ func ping(destinations chan *Destination, stopch chan bool, wg *sync.WaitGroup) 
 			}
 
 			b, err := conn.WriteTo(echoRequest, &net.UDPAddr{IP: destAddr.IP})
-			dest.last = time.Now()
+			dest.Last = time.Now().UnixNano()
 			if err != nil {
 				if v6 {
 					metrics.Addv6Failed(1)
@@ -280,22 +162,23 @@ func ping(destinations chan *Destination, stopch chan bool, wg *sync.WaitGroup) 
 	log.Println("Name channel closed.")
 }
 
-var metrics *Metrics = new(Metrics)
+var metrics = new(Metrics)
 
 func main() {
-	var stop bool = false
+	var stop = false
 	metrics.Lock()
 	metrics.startTime = time.Now()
 	metrics.Unlock()
 
 	destinations := []*Destination{
-		{name: "www.reddit.com", protocol: "udp4", interval: 1500, data: []byte("TeStDaTA")},
-		{name: "google-public-dns-a.google.com", protocol: "udp6", interval: 1000, data: []byte("TesTdaTa")},
-		{name: "www.google.com", protocol: "udp6", interval: 750, data: []byte("TEsTDaTA")},
-		{name: "www.yahoo.com", protocol: "udp4", interval: 5000, data: []byte("teSTdaTA")},
-		{name: "www.amazon.com", protocol: "udp4", interval: 10000, data: []byte("tEsTdATa")},
-		{name: "1.1.1.1", protocol: "udp4", interval: 2000, data: []byte("tEsTdATa")},
-		{name: "::1", protocol: "udp6", interval: 500, data: []byte("tEsTdATa")},
+		{Address: "www.reddit.com", Protocol: ProtoUDP4, Interval: 1500, Data: []byte("TeStDaTA"), Active:true},
+		//{Address: "google-public-dns-a.google.com", Protocol: ProtoUDP6, Interval: 1000, Data: []byte("TesTdaTa"), Active:true},
+		//{Address: "www.google.com", Protocol: ProtoUDP6, Interval: 750, Data: []byte("TEsTDaTA"), Active:true},
+		{Address: "www.yahoo.com", Protocol: ProtoUDP4, Interval: 5000, Data: []byte("teSTdaTA"), Active:true},
+		{Address: "www.amazon.com", Protocol: ProtoUDP4, Interval: 10000, Data: []byte("tEsTdATa"), Active:true},
+		{Address: "1.1.1.1", Protocol: ProtoUDP4, Interval: 2000, Data: []byte("tEsTdATa"), Active:false},
+		{Address: "localhost", Protocol: ProtoUDP4, Interval: 500, Data: []byte("tEsTdATa"), Active:true},
+		//{Address: "::1", Protocol: ProtoUDP6, Interval: 500, Data: []byte("tEsTdATa"), Active:true},
 	}
 
 	sigch := make(chan os.Signal, 5)
@@ -328,10 +211,10 @@ func main() {
 			break
 		default:
 			for _, destination := range destinations {
-				if destination.last.Add(time.Duration(destination.interval) * time.Millisecond).Before(time.Now()) {
+				if time.Now().UnixNano() > destination.Last + (int64(time.Millisecond) * int64(destination.Interval)) {
 					// Slight hack to prevent the loop from attempting to send again immediately after dispatch
 					// The value will be updated again after a transmit attempt is made
-					destination.last = time.Now()
+					destination.Last = time.Now().UnixNano()
 					namech <- destination
 				}
 			}

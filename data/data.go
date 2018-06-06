@@ -15,29 +15,118 @@
  *
  */
 
-package db
+package data
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/binary"
 	"fmt"
 	"log"
 	"time"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
+	IODeadline       = 2 * time.Second
 	MaxPayloadSize   = 32
 	MaxProbeTTL      = 30
 	MinProbeInterval = 200
 	MinProbeTTL      = 3
+	ProtoICMP        = 1
+	ProtoICMPv6      = 58
 )
 
 const (
 	_ = iota
-	ProtoUDP4 int = iota
+	ProtoUDP4 uint8 = iota
 	ProtoUDP6
 )
+
+var DataOrder binary.ByteOrder = binary.LittleEndian
+
+type Magic uint8
+var MagicV1 Magic = 146
+
+func (r *Magic) Decode(data []byte) error {
+	buf := bytes.NewReader(data)
+	if err := binary.Read(buf, DataOrder, r); err != nil {
+		log.Printf("WARN: Unable to decode Magic: %s. Value: %v\n", err, data)
+		return err
+	}
+	return nil
+}
+
+func (r *Magic) Encode() ([]byte, error) {
+	buf := new(bytes.Buffer)
+
+	err := binary.Write(buf, DataOrder, r)
+	if err != nil {
+		fmt.Printf("ERROR: Unable to Encode Magic: %s. Value %v\n", err, r)
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+/*
+ * Body - This is an echo request/reply body, which can be marshalled and
+ * unmarshalled in a friendly way using the 'binary' package.
+ *
+ * 'Magic' - A uint8 magic value used to verify we have received the data we expect
+ * in a format we understand. If 'Magic' is incorrect, processing the data should
+ * stop immediately. Magic is not part of the Body struct, and must be
+ * validated separately.
+ *
+ * 'Timestamp' - A int64 representation of a nanoseconds Unix timestamp
+ *
+ * 'Site' - The site ID that sent the probe request
+ *
+ * 'Host' - The host ID that sent the probe request
+ */
+type Body struct {
+	Timestamp int64
+	Site      uint32
+	Host      uint32
+}
+
+func (r *Body) Decode(data []byte) error {
+	buf := bytes.NewReader(data)
+
+	if err := binary.Read(buf, DataOrder, r); err != nil {
+		fmt.Printf("ERROR: Unable to Decode Body. %s\n", err)
+		return err
+	}
+	return nil
+}
+
+func (r *Body) Encode() ([]byte, error) {
+	buf := new(bytes.Buffer)
+
+	err := binary.Write(buf, DataOrder, r)
+	if err != nil {
+		fmt.Printf("ERROR: Unable to Encode Body. %s\n", err)
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+func ValidateMagic(data []byte) bool {
+	var magic Magic
+
+	err := magic.Decode(data)
+	if err != nil {
+		log.Printf("WARN: Magic byte could not be read from response packet. %s.\n", err)
+		return false
+	}
+
+	switch magic {
+	case MagicV1:
+		return true
+	default:
+		return false
+	}
+}
 
 /*
  * Sources - Database table 'sources', used for managing probe source instances.
@@ -52,19 +141,19 @@ const (
  *   sourceid - integer
  *   address  - string
  */
-type DbSource struct {
-	SourceLocation int
-	SourceHost int
-	SourceID int
-	Address  string
+type Source struct {
+	SourceLocation uint32
+	SourceHost     uint32
+	SourceID       uint16
+	Address        string
 }
 
-func (ds *DbSource) String() string {
-	return fmt.Sprintf("Source ID: %d - Address: %s\n", ds.SourceID, ds.Address)
+func (r *Source) String() string {
+	return fmt.Sprintf("Source ID: %d - Address: %s\n", r.SourceID, r.Address)
 }
 
-func (ds *DbSource) Commit(db *sql.DB) error {
-	sqlstmnt := `INSERT INTO sources(location, host, sourceid, address) values(?, ?, ?, ?)`
+func (r *Source) Commit(db *sql.DB) error {
+	sqlstmnt := `INSERT INTO sources(location, host, sourceid, address) VALUES(?, ?, ?, ?)`
 	tx, err := db.Begin()
 	if err != nil {
 		log.Printf("ERROR beginning Source transaction. %s\n", err)
@@ -78,7 +167,7 @@ func (ds *DbSource) Commit(db *sql.DB) error {
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(ds.SourceID, ds.Address)
+	_, err = stmt.Exec(r.SourceID, r.Address)
 	if err != nil {
 		log.Printf("ERROR executing Source transaction. %s\n", err)
 		return err
@@ -104,8 +193,8 @@ func CreateSourcesTable(db *sql.DB) error {
 	return nil
 }
 
-func GetSources(db *sql.DB) []DbSource {
-	var sources []DbSource
+func GetSources(db *sql.DB) []Source {
+	var sources []Source
 	sqlstmnt := `SELECT location, host, sourceid, address FROM sources`
 
 	rows, err := db.Query(sqlstmnt)
@@ -116,7 +205,7 @@ func GetSources(db *sql.DB) []DbSource {
 	defer rows.Close()
 
 	for rows.Next() {
-		s := DbSource{}
+		s := Source{}
 		err = rows.Scan(&s.SourceLocation, &s.SourceHost, &s.SourceID, &s.Address)
 		if err != nil {
 			log.Printf("ERROR querying sources. %s\n", err)
@@ -138,10 +227,10 @@ func GetSources(db *sql.DB) []DbSource {
  * Destinations - Database table 'destinations', used to store probe endpoints and parameters.
  * The 'active' field is used to determine whether or not a destination should be
  * probed or skipped during the probe loop.
- * TODO: Potential memory optimization- Remove DbDestination from slice if active is false.
+ * TODO: Potential memory optimization- Remove Destination from slice if active is false.
  *
  * The 'address' field is not unique, and should not be collapsed into single
- * DbDestination instances when read from the database since parameters could be
+ * Destination instances when read from the database since parameters could be
  * different in each record.
  *
  * 'protocol' should be one of the constants Proto*, which leaves room for future types.
@@ -162,28 +251,49 @@ func GetSources(db *sql.DB) []DbSource {
  * payload. If the field is NULL, we shouldn't populate the payload at all.
  * TODO: Limit the maximum size of 'data', trim extra bytes on SELECT.
  */
-type DbDestination struct {
-	Active   bool
+type Destination struct {
+	Last     int64
 	Address  string
-	Protocol int
-	Interval int
-	Timeout  int
-	TTL      int
+	Interval uint32
+	Timeout  uint16
+	Protocol uint8
+	TTL      uint8
+	Active   bool
 	Data     []byte
 }
 
-func (dd *DbDestination) String() string {
+func (r *Destination) String() string {
 	return fmt.Sprintf("Address: %s, Protocol: %d,\nInterval: %dms, Timeout: %d, TTL: %d\nData: %v\n",
-		dd.Address, dd.Protocol, dd.Interval, dd.Timeout, dd.TTL, dd.Data)
+		r.Address, r.Protocol, r.Interval, r.Timeout, r.TTL, r.Data)
 }
 
-func (dd *DbDestination) Commit(db *sql.DB) error {
+func (r *Destination) Commit(db *sql.DB) error {
 	sqlstmnt := `INSERT INTO destinations(active, address, protocol, interval, timeout, ttl, data)
 		VALUES(?, ?, ?, ?, ?, ?, ?)`
 
+
+	// Data Validation
+	if r.Protocol < ProtoUDP4 || r.Protocol > ProtoUDP6 {
+		return fmt.Errorf("ERROR: destination %s protocol %d is out of bounds", r.Address, r.Protocol)
+	}
+
+	if r.Interval < MinProbeInterval {
+		return fmt.Errorf("ERROR: destination %s interval %d too low", r.Address, r.Interval)
+	}
+
+	if r.TTL < MinProbeTTL {
+		return fmt.Errorf("ERROR: destination %s TTL %d too small", r.Address, r.TTL)
+	} else if r.TTL > MaxProbeTTL {
+		return fmt.Errorf("ERROR: destination %s TTL %d too large", r.Address, r.TTL)
+	}
+
+	if len(r.Data) > MaxPayloadSize {
+		return fmt.Errorf("ERROR: destination %s payload too large. Current: %d, Maximum: %d", r.Address, len(r.Data), MaxPayloadSize)
+	}
+
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf("ERROR beginning Source transaction. %s\n", err)
+		log.Printf("ERROR: beginning Source transaction. %s\n", err)
 		return err
 	}
 
@@ -194,7 +304,7 @@ func (dd *DbDestination) Commit(db *sql.DB) error {
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(dd.Active, dd.Address, dd.Protocol, dd.Interval, dd.Timeout, dd.TTL, dd.Data)
+	_, err = stmt.Exec(r.Active, r.Address, r.Protocol, r.Interval, r.Timeout, r.TTL, r.Data)
 	if err != nil {
 		log.Printf("ERROR executing Source transaction. %s\n", err)
 		return err
@@ -223,20 +333,20 @@ func CreateDestinationsTable(db *sql.DB) error {
 	return nil
 }
 
-func GetDestinations(db *sql.DB) []DbDestination {
-	var destinations []DbDestination
+func GetDestinations(db *sql.DB) []Destination {
+	var destinations []Destination
 	sqlstmnt := `SELECT active, address, protocol, interval, timeout, ttl, data FROM destinations`
 
 	rows, err := db.Query(sqlstmnt)
 	if err != nil {
-		log.Printf("ERROR querying destinations. %s\n", err)
+		log.Printf("ERROR: querying destinations. %s\n", err)
 		return nil
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		d := DbDestination{}
-		err = rows.Scan(&d.Active,
+		d := Destination{}
+		err := rows.Scan(&d.Active,
 			&d.Address,
 			&d.Protocol,
 			&d.Interval,
@@ -244,11 +354,19 @@ func GetDestinations(db *sql.DB) []DbDestination {
 			&d.TTL,
 			&d.Data)
 		if err != nil {
-			log.Printf("ERROR querying destinations. %s\n", err)
+			log.Printf("ERROR: querying destinations. %s\n", err)
 			return nil
 		}
 
-		// If Protocol is invalid, don't add 'd' to 'destinations'.
+		if ! d.Active {
+			// Destination is marked inactive, so don't bother returning it.
+			// WARNING: This could be buggy if we expect all destinations to
+			// be returned, regardless of state.
+			continue
+		}
+
+		// Data Validation
+		// Don't allow out-of-bounds data, even if it has been inserted manually.
 		if d.Protocol < ProtoUDP4 || d.Protocol > ProtoUDP6 {
 			continue
 		}
@@ -275,7 +393,7 @@ func GetDestinations(db *sql.DB) []DbDestination {
 
 	err = rows.Err()
 	if err != nil {
-		log.Printf("ERROR querying destinations. %s\n", err)
+		log.Printf("ERROR: querying destinations. %s\n", err)
 		return nil
 	}
 
@@ -303,25 +421,40 @@ func GetDestinations(db *sql.DB) []DbDestination {
  * 'datamatch' requires that the Destination be checked for this received message, and
  * the data field in the DB be compared with the data received in this message after
  * the prepended metadata is stripped.
- *
- * TODO: Add receiving site, host ID, and RTT
  */
-type DbResult struct {
-	TimeStamp time.Time
-	Address   string
-	Type      int
-	Code      int
-	ID        int
-	Sequence  int
-	DataMatch bool
+type Result struct {
+	TimeStamp   int64
+	Address     string
+	ID          uint32
+	ReceiveSite uint32
+	ReceiveHost uint32
+	RTT         uint32
+	Type        uint16
+	Code        uint16
+	Sequence    uint16
+	DataMatch   bool
 }
 
-func (dr *DbResult) String() string {
-	return fmt.Sprintf("Address: %s\nType: %s, Code: %d\nID: %d, Seq: %d\nDataMatch: %t\n",
-		dr.Address, dr.Type, dr.Code, dr.ID, dr.Sequence, dr.DataMatch)
+func (r *Result) String() string {
+	return fmt.Sprintf(
+		"Timestamp: %s, Address: %s\n" +
+			"Type: %d, Code: %d\n" +
+			"ID: %d, Seq: %d\n" +
+			"Receive Site: %d, Receive Host: %d, RTT: %d\n" +
+			"DataMatch: %t\n",
+		time.Unix(0, r.TimeStamp),
+		r.Address,
+		r.Type,
+		r.Code,
+		r.ID,
+		r.Sequence,
+		r.ReceiveSite,
+		r.ReceiveHost,
+		r.RTT,
+		r.DataMatch)
 }
 
-func (dr *DbResult) Commit(db *sql.DB) error {
+func (r *Result) Commit(db *sql.DB) error {
 	sqlstmnt := `INSERT INTO results(rtime, address, rtype, rcode, rid, rseq, datamatch)
 		VALUES(?, ?, ?, ?, ?, ?, ?)`
 
@@ -338,7 +471,7 @@ func (dr *DbResult) Commit(db *sql.DB) error {
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(dr.TimeStamp, dr.Address, dr.Type, dr.Code, dr.ID, dr.Sequence, dr.DataMatch)
+	_, err = stmt.Exec(r.TimeStamp, r.Address, r.Type, r.Code, r.ID, r.Sequence, r.DataMatch)
 	if err != nil {
 		log.Printf("ERROR executing Source transaction. %s\n", err)
 		return err
@@ -367,8 +500,8 @@ func CreateResultsTable(db *sql.DB) error {
 	return nil
 }
 
-func GetResults(db *sql.DB) []DbResult {
-	var results []DbResult
+func GetResults(db *sql.DB) []Result {
+	var results []Result
 	sqlstmnt := `SELECT address, rtime, rtype, rcode, rid, rseq, datamatch FROM results`
 
 	rows, err := db.Query(sqlstmnt)
@@ -379,7 +512,7 @@ func GetResults(db *sql.DB) []DbResult {
 	defer rows.Close()
 
 	for rows.Next() {
-		r := DbResult{}
+		r := Result{}
 		err = rows.Scan(&r.Address, &r.TimeStamp, &r.Type,
 			&r.Code, &r.ID, &r.Sequence, &r.DataMatch)
 		if err != nil {

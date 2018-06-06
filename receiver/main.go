@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 	"net"
 	"os"
@@ -10,109 +9,16 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 
-	"github.com/tomc603/pinger/sql"
 	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
 
-const (
-	ProtoICMP   = 1
-	ProtoICMPv6 = 58
-	SenderID    = 121
-	IODeadline = 2 * time.Second
-)
-
-type Metrics struct {
-	sync.RWMutex
-	v4Sent          uint
-	v4ReceiveFailed uint
-	v4ParseFailed   uint
-	v4Bytes         uint
-	v6Sent          uint
-	v6ReceiveFailed uint
-	v6ParseFailed   uint
-	v6Bytes         uint
-	startTime     time.Time
-}
-
-func (m *Metrics) Addv4Received(i uint) {
-	m.Lock()
-	m.v4Sent += i
-	m.Unlock()
-}
-
-func (m *Metrics) Addv4ReceiveFailed(i uint) {
-	m.Lock()
-	m.v4ReceiveFailed += i
-	m.Unlock()
-}
-
-func (m *Metrics) Addv4ParseFailed(i uint) {
-	m.Lock()
-	m.v4ParseFailed += i
-	m.Unlock()
-}
-
-func (m *Metrics) Addv4Bytes(i uint) {
-	m.Lock()
-	m.v4Bytes += i
-	m.Unlock()
-}
-
-func (m *Metrics) Addv6Received(i uint) {
-	m.Lock()
-	m.v6Sent += i
-	m.Unlock()
-}
-
-func (m *Metrics) Addv6ReceiveFailed(i uint) {
-	m.Lock()
-	m.v6ReceiveFailed += i
-	m.Unlock()
-}
-
-func (m *Metrics) Addv6ParseFailed(i uint) {
-	m.Lock()
-	m.v6ParseFailed += i
-	m.Unlock()
-}
-
-func (m *Metrics) Addv6Bytes(i uint) {
-	m.Lock()
-	m.v6Bytes += i
-	m.Unlock()
-}
-
-func (m *Metrics) String() string {
-	m.RLock()
-	defer m.RUnlock()
-	return fmt.Sprintf("Uptime: %v\n" +
-		"IPv4 received: %d\n" +
-		"IPv4 receive error: %d\n" +
-		"IPv4 parse error: %d\n" +
-		"IPv4 bytes: %d\n" +
-		"IPv6 received: %d\n" +
-		"IPv6 receive error: %d\n" +
-		"IPv6 parse error: %d\n" +
-		"IPv6 bytes: %d\n" +
-		"Total received: %d\n" +
-		"Total receive error: %d\n" +
-		"Total parse error: %d\n" +
-		"Total bytes: %d\n",
-		time.Since(m.startTime),
-		m.v4Sent, m.v4ReceiveFailed, m.v4ParseFailed, m.v4Bytes,
-		m.v6Sent, m.v6ReceiveFailed, m.v6ParseFailed, m.v6Bytes,
-		m.v4Sent + m.v6Sent,
-		m.v4ReceiveFailed + m.v6ReceiveFailed,
-		m.v4ParseFailed + m.v6ParseFailed,
-		m.v4Bytes + m.v6Bytes)
-}
-
-func v4Listener(stopch chan bool, wg *sync.WaitGroup) {
-	var stop bool = false
+func v4Listener(stopch chan bool, resultchan chan Result, wg *sync.WaitGroup) {
+	var stop = false
 	defer wg.Done()
 
 	conn, err := icmp.ListenPacket("udp4", "::")
@@ -154,6 +60,11 @@ func v4Listener(stopch chan bool, wg *sync.WaitGroup) {
 				log.Printf("ERROR: %s\n", err)
 			}
 
+			result := Result{
+				TimeStamp: time.Now().UnixNano(),
+				Address: peer.String(),
+			}
+
 			switch receiveMessage.Type {
 			case ipv4.ICMPTypeEchoReply:
 				metrics.Addv4Received(1)
@@ -162,15 +73,30 @@ func v4Listener(stopch chan bool, wg *sync.WaitGroup) {
 				// TODO: Decode the message, compare the data payload and record the receipt
 				// TODO: Decode probe sending location, host, and time from the message payload.
 				echoReply := receiveMessage.Body.(*icmp.Echo)
-				log.Printf("ID %d, Seq: %d, From: %s\n", echoReply.ID, echoReply.Seq, peer)
+				if ValidateMagic(echoReply.Data[0:unsafe.Sizeof(MagicV1)]) {
+					var echoBody Body
+					err := echoBody.Decode(echoReply.Data[unsafe.Sizeof(MagicV1):unsafe.Sizeof(echoBody)+1])
+					if err == nil {
+						result.ReceiveSite = echoBody.Site
+						result.ReceiveHost = echoBody.Host
+						result.RTT = uint32(time.Unix(0, result.TimeStamp).Sub(time.Unix(0, echoBody.Timestamp)) / time.Millisecond)
+					}
+				}
+
+				result.ID = uint32(echoReply.ID)
+				result.Sequence = uint16(echoReply.Seq)
+				result.Code = uint16(receiveMessage.Code)
+				result.Type = uint16(receiveMessage.Type.Protocol())
+
+				resultchan <-result
 			}
 		}
 	}
 	log.Println("Ping v4Listener stopped.")
 }
 
-func v6Listener(stopch chan bool, wg *sync.WaitGroup) {
-	var stop bool = false
+func v6Listener(stopch chan bool, resultchan chan Result, wg *sync.WaitGroup) {
+	var stop = false
 	defer wg.Done()
 
 	conn, err := icmp.ListenPacket("udp6", "::")
@@ -212,6 +138,11 @@ func v6Listener(stopch chan bool, wg *sync.WaitGroup) {
 				log.Printf("ERROR: %s\n", err)
 			}
 
+			result := Result{
+				TimeStamp: time.Now().UnixNano(),
+				Address: peer.String(),
+			}
+
 			switch receiveMessage.Type {
 			case ipv6.ICMPTypeEchoReply:
 				metrics.Addv6Received(1)
@@ -220,18 +151,39 @@ func v6Listener(stopch chan bool, wg *sync.WaitGroup) {
 				// TODO: Decode the message, compare the data payload and record the receipt
 				// TODO: Decode probe sending location, host, and time from the message payload.
 				echoReply := receiveMessage.Body.(*icmp.Echo)
-				log.Printf("ID %d, Seq: %d, From: %s\n", echoReply.ID, echoReply.Seq, peer)
+				result.ID = uint32(echoReply.ID)
+				result.Sequence = uint16(echoReply.Seq)
+				result.Code = uint16(receiveMessage.Code)
+				result.Type = uint16(receiveMessage.Type.Protocol())
+
+				resultchan <-result
 			}
 		}
 	}
 	log.Println("Ping v6Listener stopped.")
 }
 
-var metrics *Metrics = new(Metrics)
+func resultWriter(resultchan chan Result, sqldb *sql.DB, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for result := range resultchan {
+		log.Printf("%s\n", result.String())
+		//err := result.Commit(sqldb)
+		//if err != nil {
+		//	log.Printf("ERROR: Would not commit result %v.\n", result)
+		//}
+	}
+}
+
+var metrics = new(Metrics)
 
 func main() {
-	var stop bool = false
+	var stop = false
+
 	receiveWG := sync.WaitGroup{}
+	resultWG := sync.WaitGroup{}
+
+	resultch := make(chan Result, 100)
 	sigch := make(chan os.Signal, 5)
 	stopch := make(chan bool)
 
@@ -245,15 +197,21 @@ func main() {
 	metrics.startTime = time.Now()
 	metrics.Unlock()
 
-	db, err := sql.Open("sqlite3", "./db.sqlite3")
+	sqldb, err := sql.Open("sqlite3", "./db.sqlite3")
 	if err != nil {
 		log.Fatalf("ERROR: %s\n", err)
 	}
-	defer db.Close()
+	defer sqldb.Close()
+
+	// sources := db.GetSources(sqldb)
+	// destinations := db.GetDestinations(sqldb)
+
+	resultWG.Add(1)
+	go resultWriter(resultch, sqldb, &resultWG)
 
 	receiveWG.Add(2)
-	go v6Listener(stopch, &receiveWG)
-	go v4Listener(stopch, &receiveWG)
+	go v6Listener(stopch, resultch, &receiveWG)
+	go v4Listener(stopch, resultch, &receiveWG)
 
 	statsTicker := time.NewTicker(10 * time.Second)
 	for {
@@ -277,7 +235,13 @@ func main() {
 		}
 	}
 
+	// Tell the receiver functions to stop, and wait for them.
 	close(stopch)
 	receiveWG.Wait()
+
+	// Tell the result processor function to stop, and wait for it.
+	close(resultch)
+	resultWG.Wait()
+
 	log.Printf("Exiting ping receiver.")
 }

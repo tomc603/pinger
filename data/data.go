@@ -37,7 +37,7 @@ const (
 )
 
 const (
-	_ = iota
+	_               = iota
 	ProtoUDP4 uint8 = iota
 	ProtoUDP6
 )
@@ -45,6 +45,7 @@ const (
 var DataOrder binary.ByteOrder = binary.LittleEndian
 
 type Magic uint8
+
 var MagicV1 Magic = 146
 
 func (r *Magic) Decode(data []byte) error {
@@ -150,7 +151,7 @@ type Source struct {
 
 func (r *Source) String() string {
 	return fmt.Sprintf("Location: %d, Host: %d, Source ID: %d, Address: %s\n",
-		r.SourceLocation, r.SourceHost,r.SourceID, r.Address)
+		r.SourceLocation, r.SourceHost, r.SourceID, r.Address)
 }
 
 func (r *Source) Commit(db *sql.DB) error {
@@ -269,7 +270,6 @@ func (r *Destination) String() string {
 func (r *Destination) Commit(db *sql.DB) error {
 	sqlstmnt := `INSERT INTO destinations(active, address, protocol, interval, timeout, ttl, data)
 		VALUES(?, ?, ?, ?, ?, ?, ?)`
-
 
 	// Data Validation
 	if r.Protocol < ProtoUDP4 || r.Protocol > ProtoUDP6 {
@@ -399,7 +399,6 @@ func GetDestinations(db *sql.DB) []Destination {
 	return destinations
 }
 
-
 /*
  * Results - Database table 'results' contains responses to probes.
  *
@@ -436,10 +435,10 @@ type Result struct {
 
 func (r *Result) String() string {
 	return fmt.Sprintf(
-		"Timestamp: %s, Address: %s\n" +
-			"Type: %d, Code: %d\n" +
-			"ID: %d, Seq: %d\n" +
-			"Receive Site: %d, Receive Host: %d, RTT: %d\n" +
+		"Timestamp: %s, Address: %s\n"+
+			"Type: %d, Code: %d\n"+
+			"ID: %d, Seq: %d\n"+
+			"Receive Site: %d, Receive Host: %d, RTT: %d\n"+
 			"DataMatch: %t\n",
 		time.Unix(0, r.TimeStamp),
 		r.Address,
@@ -453,15 +452,9 @@ func (r *Result) String() string {
 		r.DataMatch)
 }
 
-func (r *Result) Commit(db *sql.DB) error {
+func (r *Result) Batch(tx *sql.Tx) error {
 	sqlstmnt := `INSERT INTO results(rtime, address, rsite, rhost, rtt, rtype, rcode, rid, rseq, datamatch)
 		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-
-	tx, err := db.Begin()
-	if err != nil {
-		log.Printf("ERROR: beginning Result transaction. %s\n", err)
-		return err
-	}
 
 	stmt, err := tx.Prepare(sqlstmnt)
 	if err != nil {
@@ -470,22 +463,25 @@ func (r *Result) Commit(db *sql.DB) error {
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(r.TimeStamp,
-		r.Address,
-		r.ReceiveSite,
-		r.ReceiveHost,
-		r.RTT,
-		r.Type,
-		r.Code,
-		r.ID,
-		r.Sequence,
-		r.DataMatch)
-	if err != nil {
+	if _, err := stmt.Exec(r.TimeStamp, r.Address, r.ReceiveSite, r.ReceiveHost, r.RTT,
+		r.Type, r.Code, r.ID, r.Sequence, r.DataMatch); err != nil {
 		log.Printf("ERROR: executing Result transaction. %s\n", err)
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("ERROR: rolling back Result transaction. %s.\n", rbErr)
-		}
+		return err
+	}
 
+	return nil
+}
+func (r *Result) Commit(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		log.Printf("ERROR: beginning Result transaction. %s\n", err)
+		return err
+	}
+
+	if err := r.Batch(tx); err != nil {
+		if rberr := tx.Rollback(); rberr != nil {
+			log.Printf("ERROR: rolling back Result transaction. %s\n", rberr)
+		}
 		return err
 	}
 	tx.Commit()
@@ -550,44 +546,21 @@ func BatchResultWriter(results []*Result, sqldb *sql.DB) error {
 	// Given a collection of Result struct, commit them as a single
 	// batch in a single begin/end tran instead of as individual
 	// transactions
-	sqlstmnt := `INSERT INTO results(rtime, address, rsite, rhost, rtt, rtype, rcode, rid, rseq, datamatch)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-
 	tx, err := sqldb.Begin()
 	if err != nil {
 		log.Printf("ERROR: beginning batch Result transaction. %s\n", err)
 		return err
 	}
 
-	stmt, err := tx.Prepare(sqlstmnt)
-	if err != nil {
-		log.Printf("ERROR: preparing batch Result transaction. %s\n", err)
-		return err
-	}
-	defer stmt.Close()
-
 	for _, result := range results {
-		_, err = stmt.Exec(result.TimeStamp,
-			result.Address,
-			result.ReceiveSite,
-			result.ReceiveHost,
-			result.RTT,
-			result.Type,
-			result.Code,
-			result.ID,
-			result.Sequence,
-			result.DataMatch)
-
-		if err != nil {
-			log.Printf("ERROR: executing batch Result transaction. %s\n", err)
-			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Printf("ERROR: rolling back batch Result transaction. %s.\n", rbErr)
+		if err := result.Batch(tx); err != nil {
+			if rberr := tx.Rollback(); rberr != nil {
+				log.Printf("ERROR: rolling back Result transaction. %s\n", rberr)
 			}
-
 			return err
 		}
 	}
-
 	tx.Commit()
+
 	return nil
 }

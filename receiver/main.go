@@ -19,6 +19,7 @@ import (
 )
 
 const ResultBatchSize = 10
+const DbPath = "/Users/tcameron/pinger.sqlite3"
 
 func v4Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGroup) {
 	var stop = false
@@ -232,7 +233,7 @@ func main() {
 	metrics.startTime = time.Now()
 	metrics.Unlock()
 
-	sqldb, err := sql.Open("sqlite3", "./db.sqlite3")
+	sqldb, err := sql.Open("sqlite3", DbPath)
 	if err != nil {
 		log.Fatalf("ERROR: %s\n", err)
 	}
@@ -250,7 +251,6 @@ func main() {
 	}
 
 	// sources := db.GetSources(sqldb)
-	// destinations := db.GetDestinations(sqldb)
 
 	resultWG.Add(1)
 	go resultWriter(resultch, sqldb, &resultWG)

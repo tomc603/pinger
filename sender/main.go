@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"log"
 	"net"
 	"os"
@@ -10,15 +11,16 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/tomc603/pinger/data"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
 
-const (
-	SenderID    = 121
-)
+const SenderID    = 121
+const DbPath = "/Users/tcameron/pinger.sqlite3"
+
 
 func ping(destinations chan *data.Destination, stopch chan bool, wg *sync.WaitGroup) {
 	var stop = false
@@ -167,20 +169,7 @@ var metrics = new(Metrics)
 
 func main() {
 	var stop = false
-	metrics.Lock()
-	metrics.startTime = time.Now()
-	metrics.Unlock()
-
-	destinations := []*data.Destination{
-		{Address: "www.reddit.com", Protocol: data.ProtoUDP4, Interval: 1500, Data: []byte("TeStDaTA"), Active:true},
-		//{Address: "google-public-dns-a.google.com", Protocol: data.ProtoUDP6, Interval: 1000, Data: []byte("TesTdaTa"), Active:true},
-		//{Address: "www.google.com", Protocol: data.ProtoUDP6, Interval: 750, Data: []byte("TEsTDaTA"), Active:true},
-		{Address: "www.yahoo.com", Protocol: data.ProtoUDP4, Interval: 5000, Data: []byte("teSTdaTA"), Active:true},
-		{Address: "www.amazon.com", Protocol: data.ProtoUDP4, Interval: 10000, Data: []byte("tEsTdATa"), Active:true},
-		{Address: "1.1.1.1", Protocol: data.ProtoUDP4, Interval: 2000, Data: []byte("tEsTdATa"), Active:false},
-		{Address: "localhost", Protocol: data.ProtoUDP4, Interval: 500, Data: []byte("tEsTdATa"), Active:true},
-		//{Address: "::1", Protocol: data.ProtoUDP6, Interval: 500, Data: []byte("tEsTdATa"), Active:true},
-	}
+	pingWG := sync.WaitGroup{}
 
 	sigch := make(chan os.Signal, 5)
 	namech := make(chan *data.Destination, 100)
@@ -192,7 +181,42 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGUSR1)
 
-	pingWG := sync.WaitGroup{}
+	metrics.Lock()
+	metrics.startTime = time.Now()
+	metrics.Unlock()
+
+	sqldb, err := sql.Open("sqlite3", DbPath)
+	if err != nil {
+		log.Fatalf("ERROR: %s\n", err)
+	}
+	defer sqldb.Close()
+
+	// Create tables if they don't exist.
+	if err := data.CreateSourcesTable(sqldb); err != nil {
+		log.Fatalf("ERROR: Sources table could not be created. %s.\n", err)
+	}
+	if err := data.CreateDestinationsTable(sqldb); err != nil {
+		log.Fatalf("ERROR: Destinations table could not be created. %s.\n", err)
+	}
+	if err := data.CreateResultsTable(sqldb); err != nil {
+		log.Fatalf("ERROR: Results table could not be created. %s.\n", err)
+	}
+
+	destinations := data.GetDestinations(sqldb)
+	//destinations := []*data.Destination{
+	//	//{Address: "www.reddit.com", Protocol: data.ProtoUDP4, Interval: 1500, Data: []byte("TeStDaTA"), Active:true},
+	//	////{Address: "google-public-dns-a.google.com", Protocol: data.ProtoUDP6, Interval: 1000, Data: []byte("TesTdaTa"), Active:true},
+	//	////{Address: "www.google.com", Protocol: data.ProtoUDP6, Interval: 750, Data: []byte("TEsTDaTA"), Active:true},
+	//	//{Address: "www.yahoo.com", Protocol: data.ProtoUDP4, Interval: 5000, Data: []byte("teSTdaTA"), Active:true},
+	//	//{Address: "www.amazon.com", Protocol: data.ProtoUDP4, Interval: 10000, Data: []byte("tEsTdATa"), Active:true},
+	//	//{Address: "1.1.1.1", Protocol: data.ProtoUDP4, Interval: 2000, Data: []byte("tEsTdATa"), Active:false},
+	//	{Address: "localhost", Protocol: data.ProtoUDP4, Interval: 500, Data: []byte("tEsTdATa"), Active:true},
+	//	{Address: "::1", Protocol: data.ProtoUDP6, Interval: 500, Data: []byte("tEsTdATa"), Active:true},
+	//}
+	if len(destinations) == 0 {
+		log.Fatal("ERROR: no destinations to check")
+	}
+
 	pingWG.Add(1)
 	go ping(namech, stopch, &pingWG)
 
@@ -216,7 +240,7 @@ func main() {
 					// Slight hack to prevent the loop from attempting to send again immediately after dispatch
 					// The value will be updated again after a transmit attempt is made
 					destination.Last = time.Now().UnixNano()
-					namech <- destination
+					namech <- &destination
 				}
 			}
 		}

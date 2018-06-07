@@ -470,7 +470,16 @@ func (r *Result) Commit(db *sql.DB) error {
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(r.TimeStamp, r.Address, r.Type, r.Code, r.ID, r.Sequence, r.DataMatch)
+	_, err = stmt.Exec(r.TimeStamp,
+		r.Address,
+		r.ReceiveSite,
+		r.ReceiveHost,
+		r.RTT,
+		r.Type,
+		r.Code,
+		r.ID,
+		r.Sequence,
+		r.DataMatch)
 	if err != nil {
 		log.Printf("ERROR: executing Result transaction. %s\n", err)
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -560,6 +569,9 @@ func BatchResultWriter(results []*Result, sqldb *sql.DB) error {
 	for _, result := range results {
 		_, err = stmt.Exec(result.TimeStamp,
 			result.Address,
+			result.ReceiveSite,
+			result.ReceiveHost,
+			result.RTT,
 			result.Type,
 			result.Code,
 			result.ID,

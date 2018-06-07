@@ -376,10 +376,10 @@ func GetDestinations(db *sql.DB) []Destination {
 		}
 
 		if d.TTL < MinProbeTTL {
-			log.Printf("WARN: Destination %s TTL too small. Using minimum %d.\n", d.Address, MinProbeInterval)
+			log.Printf("WARN: Destination %s TTL %d too small. Using minimum %d.\n", d.Address, d.TTL, MinProbeTTL)
 			d.TTL = MinProbeTTL
 		} else if d.TTL > MaxProbeTTL {
-			log.Printf("WARN: Destination %s TTL too large. Using maximum %d.\n", d.Address, MaxProbeTTL)
+			log.Printf("WARN: Destination %s TTL %d too large. Using maximum %d.\n", d.Address, d.TTL, MaxProbeTTL)
 			d.TTL = MaxProbeTTL
 		}
 

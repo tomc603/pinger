@@ -291,7 +291,6 @@ func (r *Destination) Start(namech chan *Destination, stopch chan bool, wg *sync
 			case <-stopch:
 				stop = true
 			case <-r.ticker.C:
-				log.Printf("%s: TICK\n", r.Address)
 				namech <- r
 			}
 		}

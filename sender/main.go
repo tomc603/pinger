@@ -18,13 +18,19 @@ import (
 	"golang.org/x/net/ipv6"
 )
 
+// TODO: Make StatsInterval a config parameter.
+const StatsInterval = 0
+// TODO: Make SenderID a config parameter. It should match the value in the Senders table.
 const SenderID    = 121
+// TODO: Make DbPath a DSN, and a config parameter.
 const DbPath = "/Users/tcameron/pinger.sqlite3"
 
+// TODO: Add functions for other types of probe than ICMP.
 
 func ping(destinations chan *data.Destination, stopch chan bool, wg *sync.WaitGroup) {
 	var stop = false
 	var seq = 0
+	wg.Add(1)
 	defer wg.Done()
 
 	// Setup connections so we aren't constantly creating and tearing them down
@@ -136,7 +142,7 @@ func ping(destinations chan *data.Destination, stopch chan bool, wg *sync.WaitGr
 			}
 
 			b, err := conn.WriteTo(echoRequest, &net.UDPAddr{IP: destAddr.IP})
-			dest.Last = time.Now().UnixNano()
+			//dest.Last = time.Now().UnixNano()
 			if err != nil {
 				if v6 {
 					metrics.Addv6Failed(1)
@@ -169,6 +175,8 @@ var metrics = new(Metrics)
 
 func main() {
 	var stop = false
+
+	destWG := sync.WaitGroup{}
 	pingWG := sync.WaitGroup{}
 
 	sigch := make(chan os.Signal, 5)
@@ -202,6 +210,7 @@ func main() {
 		log.Fatalf("ERROR: Results table could not be created. %s.\n", err)
 	}
 
+	// TODO: Put this in a Ticker controlled coroutine to watch for new, removed, and modified Destinations
 	destinations := data.GetDestinations(sqldb)
 	//destinations := []*data.Destination{
 	//	//{Address: "www.reddit.com", Protocol: data.ProtoUDP4, Interval: 1500, Data: []byte("TeStDaTA"), Active:true},
@@ -214,46 +223,59 @@ func main() {
 	//	{Address: "::1", Protocol: data.ProtoUDP6, Interval: 500, Data: []byte("tEsTdATa"), Active:true},
 	//}
 	if len(destinations) == 0 {
+		// TODO: Remove this check once we start watching for new DB entries
 		log.Fatal("ERROR: no destinations to check")
 	}
 
-	pingWG.Add(1)
+	statsTicker := &time.Ticker{}
+	if StatsInterval > 0 {
+		statsTicker = time.NewTicker(StatsInterval * time.Second)
+	}
+
 	go ping(namech, stopch, &pingWG)
 
-	statsTicker := time.NewTicker(10 * time.Second)
+	for _, destination := range destinations {
+		destination.Start(namech, stopch, &destWG)
+	}
+
 	for {
+		if stop {
+			for _, destination := range destinations {
+				destination.Stop()
+			}
+			statsTicker.Stop()
+			break
+		}
+
 		select {
 		case <-statsTicker.C:
 			log.Printf("%s\n", metrics)
 		case s := <-sigch:
-			log.Printf("Received signal %s.\n", s)
 			switch s {
+			// Handle any type of quit/kill/term/abort signal the same
+			case syscall.SIGHUP:
+				fallthrough
+			case syscall.SIGINT:
+				fallthrough
+			case syscall.SIGQUIT:
+				fallthrough
+			case syscall.SIGABRT:
+				fallthrough
+			case syscall.SIGKILL:
+				log.Printf("Received signal %s.\n", s)
+				stop = true
+			// If a user sends SIGUSR1, output the current metrics values.
 			case syscall.SIGUSR1:
 				log.Printf("%s\n", metrics)
-			default:
-				stop = true
 			}
-			break
-		default:
-			for _, destination := range destinations {
-				if time.Now().UnixNano() > destination.Last + (int64(time.Millisecond) * int64(destination.Interval)) {
-					// Slight hack to prevent the loop from attempting to send again immediately after dispatch
-					// The value will be updated again after a transmit attempt is made
-					destination.Last = time.Now().UnixNano()
-					namech <- &destination
-				}
-			}
-		}
-
-		if stop {
-			statsTicker.Stop()
 			break
 		}
 	}
 
-	// Tell the ping routine(s) that we're finished, and wait for a graceful stop.
+	// Tell the destination routine(s) that we're finished, and wait for a graceful stop.
 	close(stopch)
 	close(namech)
+	destWG.Wait()
 	pingWG.Wait()
 	log.Printf("Exiting ping sender.")
 }

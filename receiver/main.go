@@ -18,7 +18,11 @@ import (
 	"golang.org/x/net/ipv6"
 )
 
+// TODO: Make StatsInterval a config parameter.
+const StatsInterval = 0
+// TODO: Make ResultBatchSize a config parameter. If 0, do not batch results.
 const ResultBatchSize = 10
+// TODO: Make DbPath a DSN, and a config parameter.
 const DbPath = "/Users/tcameron/pinger.sqlite3"
 
 func v4Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGroup) {
@@ -252,6 +256,11 @@ func main() {
 
 	// sources := db.GetSources(sqldb)
 
+	statsTicker := &time.Ticker{}
+	if StatsInterval > 0 {
+		statsTicker = time.NewTicker(StatsInterval * time.Second)
+	}
+
 	resultWG.Add(1)
 	go resultWriter(resultch, sqldb, &resultWG)
 
@@ -259,7 +268,6 @@ func main() {
 	go v6Listener(stopch, resultch, &receiveWG)
 	go v4Listener(stopch, resultch, &receiveWG)
 
-	statsTicker := time.NewTicker(10 * time.Second)
 	for {
 		select {
 		case <-statsTicker.C:

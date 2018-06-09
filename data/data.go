@@ -23,6 +23,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 )
 
@@ -195,8 +196,8 @@ func CreateSourcesTable(db *sql.DB) error {
 	return nil
 }
 
-func GetSources(db *sql.DB) []Source {
-	var sources []Source
+func GetSources(db *sql.DB) []*Source {
+	var sources []*Source
 	sqlstmnt := `SELECT location, host, sourceid, address FROM sources`
 
 	rows, err := db.Query(sqlstmnt)
@@ -213,7 +214,7 @@ func GetSources(db *sql.DB) []Source {
 			log.Printf("ERROR: querying sources. %s\n", err)
 			return nil
 		}
-		sources = append(sources, s)
+		sources = append(sources, &s)
 	}
 
 	err = rows.Err()
@@ -252,7 +253,7 @@ func GetSources(db *sql.DB) []Source {
  * payload. If the field is NULL, we shouldn't populate the payload at all.
  */
 type Destination struct {
-	Last     int64
+	ticker   *time.Ticker
 	Address  string
 	Interval uint32
 	Timeout  uint16
@@ -260,6 +261,41 @@ type Destination struct {
 	TTL      uint8
 	Active   bool
 	Data     []byte
+}
+
+func (r *Destination) Stop() {
+	// Stopping the ticker does NOT stop the coroutine for this destination.
+	// It only stops the ticker. To stop the coroutine once it is Started
+	// you need to close the stop channel.
+	log.Printf("%s: Stop()\n", r.Address)
+	r.ticker.Stop()
+}
+
+func (r *Destination) Start(namech chan *Destination, stopch chan bool, wg *sync.WaitGroup) {
+	r.ticker = time.NewTicker(time.Duration(r.Interval) * time.Millisecond)
+
+	go func(namech chan *Destination, stopch chan bool, wg *sync.WaitGroup) {
+		var stop bool = false
+
+		log.Printf("%s: Start()\n", r.Address)
+		// We don't want to abandon any running coroutines, so handle
+		// tracking them with a waitgroup inside the routine itself.
+		wg.Add(1)
+		defer wg.Done()
+
+		for {
+			if stop {
+				break
+			}
+			select {
+			case <-stopch:
+				stop = true
+			case <-r.ticker.C:
+				log.Printf("%s: TICK\n", r.Address)
+				namech <- r
+			}
+		}
+	}(namech, stopch, wg)
 }
 
 func (r *Destination) String() string {
@@ -332,8 +368,8 @@ func CreateDestinationsTable(db *sql.DB) error {
 	return nil
 }
 
-func GetDestinations(db *sql.DB) []Destination {
-	var destinations []Destination
+func GetDestinations(db *sql.DB) []*Destination {
+	var destinations []*Destination
 	sqlstmnt := `SELECT active, address, protocol, interval, timeout, ttl, data FROM destinations`
 
 	rows, err := db.Query(sqlstmnt)
@@ -387,7 +423,7 @@ func GetDestinations(db *sql.DB) []Destination {
 			log.Printf("WARN: Destination %s payload too large. Using maximum %d.\n", d.Address, MaxPayloadSize)
 			d.Data = d.Data[:MaxPayloadSize]
 		}
-		destinations = append(destinations, d)
+		destinations = append(destinations, &d)
 	}
 
 	err = rows.Err()
@@ -511,8 +547,8 @@ func CreateResultsTable(db *sql.DB) error {
 	return nil
 }
 
-func GetResults(db *sql.DB) []Result {
-	var results []Result
+func GetResults(db *sql.DB) []*Result {
+	var results []*Result
 	sqlstmnt := `SELECT rtime, address, rsite, rhost, rtt, rtype, rcode, rid, rseq, datamatch FROM results`
 
 	rows, err := db.Query(sqlstmnt)
@@ -530,7 +566,7 @@ func GetResults(db *sql.DB) []Result {
 			log.Printf("ERROR: querying Results. %s\n", err)
 			return nil
 		}
-		results = append(results, r)
+		results = append(results, &r)
 	}
 
 	err = rows.Err()

@@ -189,21 +189,30 @@ func resultWriter(resultchan chan data.Result, sqldb *sql.DB, wg *sync.WaitGroup
 
 	log.Println("Ping resultWriter started.")
 	for result := range resultchan {
-		log.Printf("%s\n", result.String())
-		if len(resultBuf) >= ResultBatchSize {
-			err := data.BatchResultWriter(resultBuf, sqldb)
-			if err != nil {
+		//log.Printf("%s\n", result.String())
+
+		if ResultBatchSize == 0 {
+			if ce := result.Commit(sqldb); ce != nil {
+				log.Printf("ERROR: Could not commit Result %#v. %s.\n", result, ce)
+				metrics.AddDbFailedSingleCommits(1)
+			} else {
+				metrics.AddDbSingleCommits(1)
+			}
+		} else if len(resultBuf) >= ResultBatchSize {
+			if err := data.BatchResultWriter(resultBuf, sqldb); err != nil {
 				// Commit each Result individually so we save as much data as possible.
 				log.Printf("ERROR: Could not commit Result batch. %s.\n", err)
+				metrics.AddDbFailedBatchCommits(1)
 				for _, r := range resultBuf {
 					if ce := r.Commit(sqldb); ce != nil {
 						log.Printf("ERROR: Could not commit Result %#v. %s.\n", r, ce)
+						metrics.AddDbFailedSingleCommits(1)
 					} else {
-						metrics.dbSingleCommits += 1
+						metrics.AddDbSingleCommits(1)
 					}
 				}
 			} else {
-				metrics.dbBatchCommits += 1
+				metrics.AddDbBatchCommits(1)
 			}
 
 			// Empty the result buffer.

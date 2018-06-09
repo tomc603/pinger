@@ -19,9 +19,10 @@ import (
 )
 
 // TODO: Make StatsInterval a config parameter.
-const StatsInterval = 0
-// TODO: Make SenderID a config parameter. It should match the value in the Senders table.
+const StatsInterval = 60
+// TODO: Make SenderID & SiteID config parameters. They should match values in the Senders table.
 const SenderID    = 121
+const SiteID      = 101
 // TODO: Make DbPath a DSN, and a config parameter.
 const DbPath = "/Users/tcameron/pinger.sqlite3"
 
@@ -78,8 +79,8 @@ func ping(destinations chan *data.Destination, stopch chan bool, wg *sync.WaitGr
 
 			body := data.Body{
 				Timestamp: time.Now().UnixNano(),
-				Site: 101,
-				Host: 62,
+				Site: SiteID,
+				Host: SenderID,
 			}
 			bodyData, bodyErr := body.Encode()
 			if bodyErr != nil || magicErr != nil {

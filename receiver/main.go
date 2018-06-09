@@ -19,7 +19,7 @@ import (
 )
 
 // TODO: Make StatsInterval a config parameter.
-const StatsInterval = 0
+const StatsInterval = 60
 // TODO: Make ResultBatchSize a config parameter. If 0, do not batch results.
 const ResultBatchSize = 10
 // TODO: Make DbPath a DSN, and a config parameter.
@@ -27,6 +27,8 @@ const DbPath = "/Users/tcameron/pinger.sqlite3"
 
 func v4Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGroup) {
 	var stop = false
+
+	wg.Add(1)
 	defer wg.Done()
 
 	conn, err := icmp.ListenPacket("udp4", "::")
@@ -106,6 +108,8 @@ func v4Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGrou
 
 func v6Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGroup) {
 	var stop = false
+
+	wg.Add(1)
 	defer wg.Done()
 
 	conn, err := icmp.ListenPacket("udp6", "::")
@@ -185,6 +189,8 @@ func v6Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGrou
 
 func resultWriter(resultchan chan data.Result, sqldb *sql.DB, wg *sync.WaitGroup) {
 	var resultBuf []*data.Result
+
+	wg.Add(1)
 	defer wg.Done()
 
 	log.Println("Ping resultWriter started.")
@@ -270,10 +276,7 @@ func main() {
 		statsTicker = time.NewTicker(StatsInterval * time.Second)
 	}
 
-	resultWG.Add(1)
 	go resultWriter(resultch, sqldb, &resultWG)
-
-	receiveWG.Add(2)
 	go v6Listener(stopch, resultch, &receiveWG)
 	go v4Listener(stopch, resultch, &receiveWG)
 

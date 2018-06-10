@@ -25,88 +25,114 @@ import (
 
 type Metrics struct {
 	sync.RWMutex
-	v4Sent          uint
-	v4ReceiveFailed uint
-	v4ParseFailed   uint
-	v4Bytes         uint
-	v6Sent          uint
-	v6ReceiveFailed uint
-	v6ParseFailed   uint
-	v6Bytes         uint
-	dbBatchCommits  uint
-	dbSingleCommits uint
-	startTime     time.Time
+	v4Sent                uint
+	v4ReceiveFailed       uint
+	v4ParseFailed         uint
+	v4Bytes               uint
+	v6Sent                uint
+	v6ReceiveFailed       uint
+	v6ParseFailed         uint
+	v6Bytes               uint
+	dbBatchCommits        uint
+	dbFailedBatchCommits  uint
+	dbSingleCommits       uint
+	dbFailedSingleCommits uint
+	startTime             time.Time
 }
 
-func (m *Metrics) Addv4Received(i uint) {
+func (m *Metrics) AddDbBatchCommits(delta uint) {
 	m.Lock()
-	m.v4Sent += i
+	m.dbBatchCommits += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv4ReceiveFailed(i uint) {
+func (m *Metrics) AddDbFailedBatchCommits(delta uint) {
 	m.Lock()
-	m.v4ReceiveFailed += i
+	m.dbFailedBatchCommits += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv4ParseFailed(i uint) {
+func (m *Metrics) AddDbSingleCommits(delta uint) {
 	m.Lock()
-	m.v4ParseFailed += i
+	m.dbSingleCommits += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv4Bytes(i uint) {
+func (m *Metrics) AddDbFailedSingleCommits(delta uint) {
 	m.Lock()
-	m.v4Bytes += i
+	m.dbFailedSingleCommits += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv6Received(i uint) {
+func (m *Metrics) Addv4Received(delta uint) {
 	m.Lock()
-	m.v6Sent += i
+	m.v4Sent += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv6ReceiveFailed(i uint) {
+func (m *Metrics) Addv4ReceiveFailed(delta uint) {
 	m.Lock()
-	m.v6ReceiveFailed += i
+	m.v4ReceiveFailed += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv6ParseFailed(i uint) {
+func (m *Metrics) Addv4ParseFailed(delta uint) {
 	m.Lock()
-	m.v6ParseFailed += i
+	m.v4ParseFailed += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv6Bytes(i uint) {
+func (m *Metrics) Addv4Bytes(delta uint) {
 	m.Lock()
-	m.v6Bytes += i
+	m.v4Bytes += delta
+	m.Unlock()
+}
+
+func (m *Metrics) Addv6Received(delta uint) {
+	m.Lock()
+	m.v6Sent += delta
+	m.Unlock()
+}
+
+func (m *Metrics) Addv6ReceiveFailed(delta uint) {
+	m.Lock()
+	m.v6ReceiveFailed += delta
+	m.Unlock()
+}
+
+func (m *Metrics) Addv6ParseFailed(delta uint) {
+	m.Lock()
+	m.v6ParseFailed += delta
+	m.Unlock()
+}
+
+func (m *Metrics) Addv6Bytes(delta uint) {
+	m.Lock()
+	m.v6Bytes += delta
 	m.Unlock()
 }
 
 func (m *Metrics) String() string {
 	m.RLock()
 	defer m.RUnlock()
-	return fmt.Sprintf("Uptime: %v\n" +
-		"IPv4 received: %d\n" +
-		"IPv4 receive error: %d\n" +
-		"IPv4 parse error: %d\n" +
-		"IPv4 bytes: %d\n" +
-		"IPv6 received: %d\n" +
-		"IPv6 receive error: %d\n" +
-		"IPv6 parse error: %d\n" +
-		"IPv6 bytes: %d\n" +
-		"Total received: %d\n" +
-		"Total receive error: %d\n" +
-		"Total parse error: %d\n" +
+	return fmt.Sprintf("Uptime: %v\n"+
+		"IPv4 received: %d\n"+
+		"IPv4 receive error: %d\n"+
+		"IPv4 parse error: %d\n"+
+		"IPv4 bytes: %d\n"+
+		"IPv6 received: %d\n"+
+		"IPv6 receive error: %d\n"+
+		"IPv6 parse error: %d\n"+
+		"IPv6 bytes: %d\n"+
+		"Total received: %d\n"+
+		"Total receive error: %d\n"+
+		"Total parse error: %d\n"+
 		"Total bytes: %d\n",
 		time.Since(m.startTime),
 		m.v4Sent, m.v4ReceiveFailed, m.v4ParseFailed, m.v4Bytes,
 		m.v6Sent, m.v6ReceiveFailed, m.v6ParseFailed, m.v6Bytes,
-		m.v4Sent + m.v6Sent,
-		m.v4ReceiveFailed + m.v6ReceiveFailed,
-		m.v4ParseFailed + m.v6ParseFailed,
-		m.v4Bytes + m.v6Bytes)
+		m.v4Sent+m.v6Sent,
+		m.v4ReceiveFailed+m.v6ReceiveFailed,
+		m.v4ParseFailed+m.v6ParseFailed,
+		m.v4Bytes+m.v6Bytes)
 }

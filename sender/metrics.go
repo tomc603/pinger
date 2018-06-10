@@ -52,75 +52,75 @@ type Metrics struct {
 	destMetrics  map[string]DestinationMetrics
 }
 
-func (m *Metrics) Addv4Sent(i uint) {
+func (m *Metrics) Addv4Sent(delta uint) {
 	m.Lock()
-	m.v4Sent += i
+	m.v4Sent += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv4Failed(i uint) {
+func (m *Metrics) Addv4Failed(delta uint) {
 	m.Lock()
-	m.v4Failed += i
+	m.v4Failed += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv4Bytes(i uint) {
+func (m *Metrics) Addv4Bytes(delta uint) {
 	m.Lock()
-	m.v4Bytes += i
+	m.v4Bytes += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv6Sent(i uint) {
+func (m *Metrics) Addv6Sent(delta uint) {
 	m.Lock()
-	m.v6Sent += i
+	m.v6Sent += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv6Failed(i uint) {
+func (m *Metrics) Addv6Failed(delta uint) {
 	m.Lock()
-	m.v6Failed += i
+	m.v6Failed += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv6Bytes(i uint) {
+func (m *Metrics) Addv6Bytes(delta uint) {
 	m.Lock()
-	m.v6Bytes += i
+	m.v6Bytes += delta
 	m.Unlock()
 }
 
-func (m *Metrics) AddEmptyDest(i uint) {
+func (m *Metrics) AddEmptyDest(delta uint) {
 	m.Lock()
-	m.emptyDest += i
+	m.emptyDest += delta
 	m.Unlock()
 }
 
-func (m *Metrics) AddDnsTimeout(i uint) {
+func (m *Metrics) AddDnsTimeout(delta uint) {
 	m.Lock()
-	m.dnsTimeout += i
+	m.dnsTimeout += delta
 	m.Unlock()
 }
 
-func (m *Metrics) AddDnsTempFail(i uint) {
+func (m *Metrics) AddDnsTempFail(delta uint) {
 	m.Lock()
-	m.dnsTempFail += i
+	m.dnsTempFail += delta
 	m.Unlock()
 }
 
-func (m *Metrics) AddDnsError(i uint) {
+func (m *Metrics) AddDnsError(delta uint) {
 	m.Lock()
-	m.dnsError += i
+	m.dnsError += delta
 	m.Unlock()
 }
 
-func (m *Metrics) AddAddressError(i uint) {
+func (m *Metrics) AddAddressError(delta uint) {
 	m.Lock()
-	m.addrError += i
+	m.addrError += delta
 	m.Unlock()
 }
 
-func (m *Metrics) AddUnknownError(i uint) {
+func (m *Metrics) AddUnknownError(delta uint) {
 	m.Lock()
-	m.unknownError += i
+	m.unknownError += delta
 	m.Unlock()
 }
 

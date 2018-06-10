@@ -18,11 +18,17 @@ import (
 	"golang.org/x/net/ipv6"
 )
 
+// TODO: Make StatsInterval a config parameter.
+const StatsInterval = 60
+// TODO: Make ResultBatchSize a config parameter. If 0, do not batch results.
 const ResultBatchSize = 10
+// TODO: Make DbPath a DSN, and a config parameter.
 const DbPath = "/Users/tcameron/pinger.sqlite3"
 
 func v4Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGroup) {
 	var stop = false
+
+	wg.Add(1)
 	defer wg.Done()
 
 	conn, err := icmp.ListenPacket("udp4", "::")
@@ -102,6 +108,8 @@ func v4Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGrou
 
 func v6Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGroup) {
 	var stop = false
+
+	wg.Add(1)
 	defer wg.Done()
 
 	conn, err := icmp.ListenPacket("udp6", "::")
@@ -181,25 +189,36 @@ func v6Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGrou
 
 func resultWriter(resultchan chan data.Result, sqldb *sql.DB, wg *sync.WaitGroup) {
 	var resultBuf []*data.Result
+
+	wg.Add(1)
 	defer wg.Done()
 
 	log.Println("Ping resultWriter started.")
 	for result := range resultchan {
-		log.Printf("%s\n", result.String())
-		if len(resultBuf) >= ResultBatchSize {
-			err := data.BatchResultWriter(resultBuf, sqldb)
-			if err != nil {
+		//log.Printf("%s\n", result.String())
+
+		if ResultBatchSize == 0 {
+			if ce := result.Commit(sqldb); ce != nil {
+				log.Printf("ERROR: Could not commit Result %#v. %s.\n", result, ce)
+				metrics.AddDbFailedSingleCommits(1)
+			} else {
+				metrics.AddDbSingleCommits(1)
+			}
+		} else if len(resultBuf) >= ResultBatchSize {
+			if err := data.BatchResultWriter(resultBuf, sqldb); err != nil {
 				// Commit each Result individually so we save as much data as possible.
 				log.Printf("ERROR: Could not commit Result batch. %s.\n", err)
+				metrics.AddDbFailedBatchCommits(1)
 				for _, r := range resultBuf {
 					if ce := r.Commit(sqldb); ce != nil {
 						log.Printf("ERROR: Could not commit Result %#v. %s.\n", r, ce)
+						metrics.AddDbFailedSingleCommits(1)
 					} else {
-						metrics.dbSingleCommits += 1
+						metrics.AddDbSingleCommits(1)
 					}
 				}
 			} else {
-				metrics.dbBatchCommits += 1
+				metrics.AddDbBatchCommits(1)
 			}
 
 			// Empty the result buffer.
@@ -252,14 +271,15 @@ func main() {
 
 	// sources := db.GetSources(sqldb)
 
-	resultWG.Add(1)
-	go resultWriter(resultch, sqldb, &resultWG)
+	statsTicker := &time.Ticker{}
+	if StatsInterval > 0 {
+		statsTicker = time.NewTicker(StatsInterval * time.Second)
+	}
 
-	receiveWG.Add(2)
+	go resultWriter(resultch, sqldb, &resultWG)
 	go v6Listener(stopch, resultch, &receiveWG)
 	go v4Listener(stopch, resultch, &receiveWG)
 
-	statsTicker := time.NewTicker(10 * time.Second)
 	for {
 		select {
 		case <-statsTicker.C:

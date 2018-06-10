@@ -24,14 +24,14 @@ import (
 )
 
 type DestinationMetrics struct {
-	v4Sent       uint
-	v4Failed     uint
-	v4Bytes      uint
-	v6Sent       uint
-	v6Failed     uint
-	v6Bytes      uint
-	dnsError     uint
-	addrError    uint
+	v4Sent    uint
+	v4Failed  uint
+	v4Bytes   uint
+	v6Sent    uint
+	v6Failed  uint
+	v6Bytes   uint
+	dnsError  uint
+	addrError uint
 }
 
 type Metrics struct {
@@ -127,26 +127,26 @@ func (m *Metrics) AddUnknownError(delta uint) {
 func (m *Metrics) String() string {
 	m.RLock()
 	defer m.RUnlock()
-	return fmt.Sprintf("Uptime: %v\n" +
-		"IPv4 sent: %d\n" +
-		"IPv4 failed: %d\n" +
-		"IPv4 bytes: %d\n" +
-		"IPv6 sent: %d\n" +
-		"IPv6 failed: %d\n" +
-		"IPv6 bytes: %d\n" +
-		"Total sent: %d\n" +
-		"Total failed: %d\n" +
-		"Total bytes: %d\n" +
-		"Empty Destination: %d\n" +
-		"DNS timeouts: %d\n" +
-		"DNS temporary failures: %d\n" +
-		"DNS errors: %d\n" +
-		"Address errors: %d\n" +
+	return fmt.Sprintf("Uptime: %v\n"+
+		"IPv4 sent: %d\n"+
+		"IPv4 failed: %d\n"+
+		"IPv4 bytes: %d\n"+
+		"IPv6 sent: %d\n"+
+		"IPv6 failed: %d\n"+
+		"IPv6 bytes: %d\n"+
+		"Total sent: %d\n"+
+		"Total failed: %d\n"+
+		"Total bytes: %d\n"+
+		"Empty Destination: %d\n"+
+		"DNS timeouts: %d\n"+
+		"DNS temporary failures: %d\n"+
+		"DNS errors: %d\n"+
+		"Address errors: %d\n"+
 		"Unknown errors: %d\n",
 		time.Since(m.startTime),
 		m.v4Sent, m.v4Failed, m.v4Bytes,
 		m.v6Sent, m.v6Failed, m.v6Bytes,
-		m.v4Sent+m.v6Sent, m.v4Failed + m.v6Failed, m.v4Bytes + m.v6Bytes,
+		m.v4Sent+m.v6Sent, m.v4Failed+m.v6Failed, m.v4Bytes+m.v6Bytes,
 		m.emptyDest, m.dnsTimeout, m.dnsTempFail, m.dnsError,
 		m.addrError, m.unknownError)
 }

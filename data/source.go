@@ -37,6 +37,7 @@ import (
  *   address  - string
  */
 type Source struct {
+	ID             int
 	SourceLocation uint32
 	SourceHost     uint32
 	SourceID       uint16
@@ -44,8 +45,8 @@ type Source struct {
 }
 
 func (r *Source) String() string {
-	return fmt.Sprintf("Location: %d, Host: %d, Source ID: %d, Address: %s\n",
-		r.SourceLocation, r.SourceHost, r.SourceID, r.Address)
+	return fmt.Sprintf("ID: %d, Location: %d, Host: %d, Source ID: %d, Address: %s\n",
+		r.ID, r.SourceLocation, r.SourceHost, r.SourceID, r.Address)
 }
 
 func (r *Source) Commit(db *sql.DB) error {
@@ -91,7 +92,7 @@ func CreateSourcesTable(db *sql.DB) error {
 
 func GetSources(db *sql.DB) []*Source {
 	var sources []*Source
-	sqlstmnt := `SELECT location, host, sourceid, address FROM sources`
+	sqlstmnt := `SELECT id, location, host, sourceid, address FROM sources`
 
 	rows, err := db.Query(sqlstmnt)
 	if err != nil {
@@ -102,7 +103,7 @@ func GetSources(db *sql.DB) []*Source {
 
 	for rows.Next() {
 		s := Source{}
-		err = rows.Scan(&s.SourceLocation, &s.SourceHost, &s.SourceID, &s.Address)
+		err = rows.Scan(&s.ID, &s.SourceLocation, &s.SourceHost, &s.SourceID, &s.Address)
 		if err != nil {
 			log.Printf("ERROR: querying sources. %s\n", err)
 			return nil

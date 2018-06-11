@@ -48,12 +48,13 @@ import (
 type Result struct {
 	TimeStamp   int64
 	Address     string
-	ID          uint32
+	ID          int
 	ReceiveSite uint32
 	ReceiveHost uint32
 	RTT         uint32
 	Type        uint16
 	Code        uint16
+	RequestID   uint16
 	Sequence    uint16
 	DataMatch   bool
 }
@@ -70,7 +71,7 @@ func (r *Result) Batch(tx *sql.Tx) error {
 	defer stmt.Close()
 
 	if _, err := stmt.Exec(r.TimeStamp, r.Address, r.ReceiveSite, r.ReceiveHost, r.RTT,
-		r.Type, r.Code, r.ID, r.Sequence, r.DataMatch); err != nil {
+		r.Type, r.Code, r.RequestID, r.Sequence, r.DataMatch); err != nil {
 		log.Printf("ERROR: executing Result transaction. %s\n", err)
 		return err
 	}
@@ -97,16 +98,17 @@ func (r *Result) Commit(db *sql.DB) error {
 
 func (r *Result) String() string {
 	return fmt.Sprintf(
-		"Timestamp: %s, Address: %s\n"+
+		"ID: %d, Timestamp: %s, Address: %s\n"+
 			"Type: %d, Code: %d\n"+
 			"ID: %d, Seq: %d\n"+
 			"Receive Site: %d, Receive Host: %d, RTT: %d\n"+
 			"DataMatch: %t\n",
+		r.ID,
 		time.Unix(0, r.TimeStamp),
 		r.Address,
 		r.Type,
 		r.Code,
-		r.ID,
+		r.RequestID,
 		r.Sequence,
 		r.ReceiveSite,
 		r.ReceiveHost,
@@ -161,7 +163,7 @@ func CreateResultsTable(db *sql.DB) error {
 
 func GetResults(db *sql.DB) []*Result {
 	var results []*Result
-	sqlstmnt := `SELECT rtime, address, rsite, rhost, rtt, rtype, rcode, rid, rseq, datamatch FROM results`
+	sqlstmnt := `SELECT id, rtime, address, rsite, rhost, rtt, rtype, rcode, rid, rseq, datamatch FROM results`
 
 	rows, err := db.Query(sqlstmnt)
 	if err != nil {
@@ -172,8 +174,8 @@ func GetResults(db *sql.DB) []*Result {
 
 	for rows.Next() {
 		r := Result{}
-		err = rows.Scan(&r.TimeStamp, &r.Address, &r.ReceiveSite, &r.ReceiveHost, &r.RTT,
-			&r.Type, &r.Code, &r.ID, &r.Sequence, &r.DataMatch)
+		err = rows.Scan(&r.ID, &r.TimeStamp, &r.Address, &r.ReceiveSite, &r.ReceiveHost, &r.RTT,
+			&r.Type, &r.Code, &r.RequestID, &r.Sequence, &r.DataMatch)
 		if err != nil {
 			log.Printf("ERROR: querying Results. %s\n", err)
 			return nil

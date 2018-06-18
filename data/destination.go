@@ -60,6 +60,7 @@ type Destination struct {
 	Protocol uint8
 	TTL      uint8
 	Active   bool
+	running  bool
 	stopFlag bool
 	Data     []byte
 }
@@ -67,34 +68,43 @@ type Destination struct {
 func (r *Destination) Stop() {
 	// Stop the Ticker, and set the stopFlag semaphore on this goroutine.
 	// To stop the running goroutine, you may also close the stop channel.
-	log.Printf("%s: Stop()\n", r.Address)
-	r.ticker.Stop()
-	r.stopFlag = true
+	if r.running {
+		log.Printf("%s: Stop()\n", r.Address)
+		r.ticker.Stop()
+		r.stopFlag = true
+	}
 }
 
 func (r *Destination) Start(namech chan *Destination, stopch chan bool, wg *sync.WaitGroup) {
-	r.ticker = time.NewTicker(time.Duration(r.Interval) * time.Millisecond)
+	// If the running semaphore is set, return immediately so we don't accidentally start
+	// another coroutine on a Destination that already has one.
+	if r.running {
+		return
+	}
 
-	go func(namech chan *Destination, stopch chan bool, wg *sync.WaitGroup) {
+	r.stopFlag = false
+	r.ticker = time.NewTicker(time.Duration(r.Interval) * time.Millisecond)
+	go func(dest *Destination, namech chan *Destination, stopch chan bool, wg *sync.WaitGroup) {
 		log.Printf("%s: Start()\n", r.Address)
-		// We don't want to abandon any running coroutines, so handle
-		// tracking them with a waitgroup inside the routine itself.
 		wg.Add(1)
 		defer wg.Done()
 
+		dest.running = true
 		for {
-			if r.stopFlag {
+			if dest.stopFlag {
 				break
 			}
 			select {
 			case <-stopch:
-				r.stopFlag = true
+				dest.stopFlag = true
 				break
-			case <-r.ticker.C:
-				namech <- r
+			case <-dest.ticker.C:
+				namech <- dest
 			}
 		}
-	}(namech, stopch, wg)
+		dest.ticker.Stop()
+		dest.running = false
+	}(r, namech, stopch, wg)
 }
 
 func (r *Destination) String() string {
@@ -195,7 +205,7 @@ func GetDestinations(db *sql.DB) []*Destination {
 			return nil
 		}
 
-		if ! d.Active {
+		if !d.Active {
 			// Destination is marked inactive, so don't bother returning it.
 			// WARNING: This could be buggy if we expect all destinations to
 			// be returned, regardless of state.

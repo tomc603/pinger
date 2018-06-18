@@ -45,7 +45,7 @@ type Source struct {
 }
 
 func (r *Source) String() string {
-	return fmt.Sprintf("ID: %d, Location: %d, Host: %d, Source ID: %d, Address: %s\n",
+	return fmt.Sprintf("Id: %d, Location: %d, Host: %d, Source Id: %d, Address: %s\n",
 		r.ID, r.SourceLocation, r.SourceHost, r.SourceID, r.Address)
 }
 

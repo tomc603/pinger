@@ -98,9 +98,9 @@ func (r *Result) Commit(db *sql.DB) error {
 
 func (r *Result) String() string {
 	return fmt.Sprintf(
-		"ID: %d, Timestamp: %s, Address: %s\n"+
+		"Id: %d, Timestamp: %s, Address: %s\n"+
 			"Type: %d, Code: %d\n"+
-			"ID: %d, Seq: %d\n"+
+			"Id: %d, Seq: %d\n"+
 			"Receive Site: %d, Receive Host: %d, RTT: %d\n"+
 			"DataMatch: %t\n",
 		r.ID,

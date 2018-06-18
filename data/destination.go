@@ -53,7 +53,7 @@ import (
  */
 type Destination struct {
 	ticker   *time.Ticker
-	ID       int
+	Id       int
 	Address  string
 	Interval uint32
 	Timeout  uint16
@@ -108,8 +108,8 @@ func (r *Destination) Start(namech chan *Destination, stopch chan bool, wg *sync
 }
 
 func (r *Destination) String() string {
-	return fmt.Sprintf("ID: %d, Address: %s, Protocol: %d,\nInterval: %dms, Timeout: %d, TTL: %d\nData: %v\n",
-		r.ID, r.Address, r.Protocol, r.Interval, r.Timeout, r.TTL, r.Data)
+	return fmt.Sprintf("Id: %d, Address: %s, Protocol: %d,\nInterval: %dms, Timeout: %d, TTL: %d\nData: %v\n",
+		r.Id, r.Address, r.Protocol, r.Interval, r.Timeout, r.TTL, r.Data)
 }
 
 func (r *Destination) Commit(db *sql.DB) error {
@@ -192,7 +192,7 @@ func GetDestinations(db *sql.DB) []*Destination {
 		// Booleans should initialize to false, but I'm old school and I
 		// like being explicit so behavior changes never surprise me.
 		d := Destination{stopFlag: false}
-		err := rows.Scan(&d.ID,
+		err := rows.Scan(&d.Id,
 			&d.Active,
 			&d.Address,
 			&d.Protocol,
@@ -219,20 +219,20 @@ func GetDestinations(db *sql.DB) []*Destination {
 		}
 
 		if d.Interval < MinProbeInterval {
-			log.Printf("WARN: ID %d: Destination %s interval too low. Using minimum %d.\n", d.ID, d.ID, d.Address, MinProbeInterval)
+			log.Printf("WARN: Id %d: Destination %s interval too low. Using minimum %d.\n", d.Id, d.Id, d.Address, MinProbeInterval)
 			d.Interval = MinProbeInterval
 		}
 
 		if d.TTL < MinProbeTTL {
-			log.Printf("WARN: ID %d: Destination %s TTL %d too small. Using minimum %d.\n", d.ID, d.Address, d.TTL, MinProbeTTL)
+			log.Printf("WARN: Id %d: Destination %s TTL %d too small. Using minimum %d.\n", d.Id, d.Address, d.TTL, MinProbeTTL)
 			d.TTL = MinProbeTTL
 		} else if d.TTL > MaxProbeTTL {
-			log.Printf("WARN: ID %d: Destination %s TTL %d too large. Using maximum %d.\n", d.Address, d.TTL, MaxProbeTTL)
+			log.Printf("WARN: Id %d: Destination %s TTL %d too large. Using maximum %d.\n", d.Address, d.TTL, MaxProbeTTL)
 			d.TTL = MaxProbeTTL
 		}
 
 		if len(d.Data) > MaxPayloadSize {
-			log.Printf("WARN: ID %d: Destination %s payload too large. Using maximum %d.\n", d.ID, d.Address, MaxPayloadSize)
+			log.Printf("WARN: Id %d: Destination %s payload too large. Using maximum %d.\n", d.Id, d.Address, MaxPayloadSize)
 			d.Data = d.Data[:MaxPayloadSize]
 		}
 		destinations = append(destinations, &d)

@@ -99,7 +99,7 @@ func v4Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGrou
 					}
 				}
 
-				result.ID = uint32(echoReply.ID)
+				result.RequestID = uint16(echoReply.ID)
 				result.Sequence = uint16(echoReply.Seq)
 				result.Code = uint16(receiveMessage.Code)
 				result.Type = uint16(receiveMessage.Type.Protocol())
@@ -180,7 +180,7 @@ func v6Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGrou
 					}
 				}
 
-				result.ID = uint32(echoReply.ID)
+				result.RequestID = uint16(echoReply.ID)
 				result.Sequence = uint16(echoReply.Seq)
 				result.Code = uint16(receiveMessage.Code)
 				result.Type = uint16(receiveMessage.Type.Protocol())

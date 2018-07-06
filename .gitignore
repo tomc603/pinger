@@ -9,8 +9,7 @@
 *.out
 
 # Ignore compiled output
-receiver/receiver
-sender/sender
+pinger
 
 # Ignore Databases
 *.sqlite3

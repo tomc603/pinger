@@ -15,7 +15,7 @@
  *
  */
 
-package data
+package main
 
 import (
 	"database/sql"
@@ -219,7 +219,7 @@ func GetDestinations(db *sql.DB) []*Destination {
 		}
 
 		if d.Interval < MinProbeInterval {
-			log.Printf("WARN: Id %d: Destination %s interval too low. Using minimum %d.\n", d.Id, d.Id, d.Address, MinProbeInterval)
+			log.Printf("WARN: Id %d: Destination %s interval too low. Using minimum %d.\n", d.Id, d.Address, MinProbeInterval)
 			d.Interval = MinProbeInterval
 		}
 
@@ -227,7 +227,7 @@ func GetDestinations(db *sql.DB) []*Destination {
 			log.Printf("WARN: Id %d: Destination %s TTL %d too small. Using minimum %d.\n", d.Id, d.Address, d.TTL, MinProbeTTL)
 			d.TTL = MinProbeTTL
 		} else if d.TTL > MaxProbeTTL {
-			log.Printf("WARN: Id %d: Destination %s TTL %d too large. Using maximum %d.\n", d.Address, d.TTL, MaxProbeTTL)
+			log.Printf("WARN: Id %d: Destination %s TTL %d too large. Using maximum %d.\n", d.Id, d.Address, d.TTL, MaxProbeTTL)
 			d.TTL = MaxProbeTTL
 		}
 

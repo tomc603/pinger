@@ -24,13 +24,12 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/tomc603/pinger/data"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
 
-func v4Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGroup) {
+func v4Listener(stopch chan bool, resultchan chan Result, wg *sync.WaitGroup) {
 	var stop = false
 
 	wg.Add(1)
@@ -48,7 +47,7 @@ func v4Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGrou
 			break
 		}
 
-		err := conn.SetDeadline(time.Now().Add(data.IODeadline))
+		err := conn.SetDeadline(time.Now().Add(IODeadline))
 		if err != nil {
 			log.Fatalf("FATAL: Error setting I/O deadline on v4 interface: %s\n", err)
 		}
@@ -64,34 +63,34 @@ func v4Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGrou
 			if err, ok := err.(net.Error); ok && err.Timeout() {
 				continue
 			} else if err != nil {
-				metrics.Addv4ReceiveFailed(1)
+				listener_metrics.Addv4ReceiveFailed(1)
 				log.Printf("ERROR: %#v\n", err)
 				continue
 			}
 
-			receiveMessage, err := icmp.ParseMessage(data.ProtoICMP, receiveBuffer[:n])
+			receiveMessage, err := icmp.ParseMessage(ProtoICMP, receiveBuffer[:n])
 			if err != nil {
-				metrics.Addv4ParseFailed(1)
+				listener_metrics.Addv4ParseFailed(1)
 				log.Printf("ERROR: %s\n", err)
 			}
 
-			result := data.Result{
+			result := Result{
 				TimeStamp: time.Now().UnixNano(),
 				Address:   peer.String(),
 			}
 
 			switch receiveMessage.Type {
 			case ipv4.ICMPTypeEchoReply:
-				metrics.Addv4Received(1)
-				metrics.Addv4Bytes(uint(n))
+				listener_metrics.Addv4Received(1)
+				listener_metrics.Addv4Bytes(uint(n))
 
 				// TODO: Compare the data payload and record match / no match in the receipt
 				echoReply := receiveMessage.Body.(*icmp.Echo)
 
 				// Magic number means we have embedded data
-				if data.ValidateMagic(echoReply.Data[0:unsafe.Sizeof(data.MagicV1)]) {
-					var echoBody data.Body
-					err := echoBody.Decode(echoReply.Data[unsafe.Sizeof(data.MagicV1) : unsafe.Sizeof(echoBody)+1])
+				if ValidateMagic(echoReply.Data[0:unsafe.Sizeof(MagicV1)]) {
+					var echoBody Body
+					err := echoBody.Decode(echoReply.Data[unsafe.Sizeof(MagicV1) : unsafe.Sizeof(echoBody)+1])
 					if err == nil {
 						result.ReceiveSite = echoBody.Site
 						result.ReceiveHost = echoBody.Host
@@ -111,7 +110,7 @@ func v4Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGrou
 	log.Println("Ping v4Listener stopped.")
 }
 
-func v6Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGroup) {
+func v6Listener(stopch chan bool, resultchan chan Result, wg *sync.WaitGroup) {
 	var stop = false
 
 	wg.Add(1)
@@ -129,7 +128,7 @@ func v6Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGrou
 			break
 		}
 
-		err := conn.SetDeadline(time.Now().Add(data.IODeadline))
+		err := conn.SetDeadline(time.Now().Add(IODeadline))
 		if err != nil {
 			log.Fatalf("FATAL: Error setting I/O deadline on v6 interface: %s\n", err)
 		}
@@ -145,34 +144,34 @@ func v6Listener(stopch chan bool, resultchan chan data.Result, wg *sync.WaitGrou
 			if err, ok := err.(net.Error); ok && err.Timeout() {
 				continue
 			} else if err != nil {
-				metrics.Addv4ReceiveFailed(1)
+				listener_metrics.Addv4ReceiveFailed(1)
 				log.Printf("ERROR: reading from connection to buffer. %s\n", err)
 				continue
 			}
 
-			receiveMessage, err := icmp.ParseMessage(data.ProtoICMPv6, receiveBuffer[:n])
+			receiveMessage, err := icmp.ParseMessage(ProtoICMPv6, receiveBuffer[:n])
 			if err != nil {
-				metrics.Addv6ParseFailed(1)
+				listener_metrics.Addv6ParseFailed(1)
 				log.Printf("ERROR: parsing ICMP message. %s\n", err)
 			}
 
-			result := data.Result{
+			result := Result{
 				TimeStamp: time.Now().UnixNano(),
 				Address:   peer.String(),
 			}
 
 			switch receiveMessage.Type {
 			case ipv6.ICMPTypeEchoReply:
-				metrics.Addv6Received(1)
-				metrics.Addv6Bytes(uint(n))
+				listener_metrics.Addv6Received(1)
+				listener_metrics.Addv6Bytes(uint(n))
 
 				// TODO: Compare the data payload and record match / no match in the receipt
 				echoReply := receiveMessage.Body.(*icmp.Echo)
 
 				// Magic number means we have embedded data
-				if data.ValidateMagic(echoReply.Data[0:unsafe.Sizeof(data.MagicV1)]) {
-					var echoBody data.Body
-					err := echoBody.Decode(echoReply.Data[unsafe.Sizeof(data.MagicV1) : unsafe.Sizeof(echoBody)+1])
+				if ValidateMagic(echoReply.Data[0:unsafe.Sizeof(MagicV1)]) {
+					var echoBody Body
+					err := echoBody.Decode(echoReply.Data[unsafe.Sizeof(MagicV1) : unsafe.Sizeof(echoBody)+1])
 					if err == nil {
 						result.ReceiveSite = echoBody.Site
 						result.ReceiveHost = echoBody.Host

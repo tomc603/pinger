@@ -23,7 +23,7 @@ import (
 	"time"
 )
 
-type Metrics struct {
+type ListenerMetrics struct {
 	sync.RWMutex
 	v4Sent                uint
 	v4ReceiveFailed       uint
@@ -40,79 +40,79 @@ type Metrics struct {
 	startTime             time.Time
 }
 
-func (m *Metrics) AddDbBatchCommits(delta uint) {
+func (m *ListenerMetrics) AddDbBatchCommits(delta uint) {
 	m.Lock()
 	m.dbBatchCommits += delta
 	m.Unlock()
 }
 
-func (m *Metrics) AddDbFailedBatchCommits(delta uint) {
+func (m *ListenerMetrics) AddDbFailedBatchCommits(delta uint) {
 	m.Lock()
 	m.dbFailedBatchCommits += delta
 	m.Unlock()
 }
 
-func (m *Metrics) AddDbSingleCommits(delta uint) {
+func (m *ListenerMetrics) AddDbSingleCommits(delta uint) {
 	m.Lock()
 	m.dbSingleCommits += delta
 	m.Unlock()
 }
 
-func (m *Metrics) AddDbFailedSingleCommits(delta uint) {
+func (m *ListenerMetrics) AddDbFailedSingleCommits(delta uint) {
 	m.Lock()
 	m.dbFailedSingleCommits += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv4Received(delta uint) {
+func (m *ListenerMetrics) Addv4Received(delta uint) {
 	m.Lock()
 	m.v4Sent += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv4ReceiveFailed(delta uint) {
+func (m *ListenerMetrics) Addv4ReceiveFailed(delta uint) {
 	m.Lock()
 	m.v4ReceiveFailed += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv4ParseFailed(delta uint) {
+func (m *ListenerMetrics) Addv4ParseFailed(delta uint) {
 	m.Lock()
 	m.v4ParseFailed += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv4Bytes(delta uint) {
+func (m *ListenerMetrics) Addv4Bytes(delta uint) {
 	m.Lock()
 	m.v4Bytes += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv6Received(delta uint) {
+func (m *ListenerMetrics) Addv6Received(delta uint) {
 	m.Lock()
 	m.v6Sent += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv6ReceiveFailed(delta uint) {
+func (m *ListenerMetrics) Addv6ReceiveFailed(delta uint) {
 	m.Lock()
 	m.v6ReceiveFailed += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv6ParseFailed(delta uint) {
+func (m *ListenerMetrics) Addv6ParseFailed(delta uint) {
 	m.Lock()
 	m.v6ParseFailed += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv6Bytes(delta uint) {
+func (m *ListenerMetrics) Addv6Bytes(delta uint) {
 	m.Lock()
 	m.v6Bytes += delta
 	m.Unlock()
 }
 
-func (m *Metrics) String() string {
+func (m *ListenerMetrics) String() string {
 	m.RLock()
 	defer m.RUnlock()
 	return fmt.Sprintf("Uptime: %v\n"+

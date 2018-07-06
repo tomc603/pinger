@@ -24,13 +24,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tomc603/pinger/data"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
 
-func ping(destinations chan *data.Destination, stopch chan bool, wg *sync.WaitGroup) {
+func ping(destinations chan *Destination, stopch chan bool, wg *sync.WaitGroup) {
 	var stop = false
 	var seq = 0
 	wg.Add(1)
@@ -64,19 +63,19 @@ func ping(destinations chan *data.Destination, stopch chan bool, wg *sync.WaitGr
 			if dest == nil || dest.Address == "" || dest.Protocol == 0 {
 				// Because we've closed the channel, the pointer to a Destination could be a nil pointer
 				// or the Destination could be empty/meaningless due to data error.
-				metrics.AddEmptyDest(1)
+				sender_metrics.AddEmptyDest(1)
 				log.Println("Received an empty Destination")
 				continue
 			}
 
 			bodyBuffer := new(bytes.Buffer)
-			magicData, magicErr := data.MagicV1.Encode()
+			magicData, magicErr := MagicV1.Encode()
 			if magicErr != nil {
 				log.Printf("WARN: Could not encode Magic value. %s\n", magicErr)
 			}
 			bodyBuffer.Write(magicData)
 
-			body := data.Body{
+			body := Body{
 				Timestamp: time.Now().UnixNano(),
 				Site:      SiteID,
 				Host:      SenderID,
@@ -101,7 +100,7 @@ func ping(destinations chan *data.Destination, stopch chan bool, wg *sync.WaitGr
 				Body: &echoRequestBody,
 			}
 
-			if dest.Protocol == data.ProtoUDP6 {
+			if dest.Protocol == ProtoUDP6 {
 				v6 = true
 				conn = v6conn
 				listenNetType = "ip6"
@@ -114,22 +113,22 @@ func ping(destinations chan *data.Destination, stopch chan bool, wg *sync.WaitGr
 				case *net.DNSError:
 					e := err.(*net.DNSError)
 					if e.IsTimeout {
-						metrics.AddDnsTimeout(1)
+						sender_metrics.AddDnsTimeout(1)
 						log.Printf("ERROR: DNS Timeout: %#v", e.Name)
 					} else if e.IsTemporary {
-						metrics.AddDnsTempFail(1)
+						sender_metrics.AddDnsTempFail(1)
 						log.Printf("ERROR: DNS Temporary Failure: %#v", e)
 					} else {
-						metrics.AddDnsError(1)
+						sender_metrics.AddDnsError(1)
 						log.Printf("ERROR: DNS Error: %#v", e)
 					}
 				case *net.AddrError:
-					metrics.AddAddressError(1)
+					sender_metrics.AddAddressError(1)
 					log.Printf("ERROR: No %s Address: '%s'. %s",
 						listenNetType,
 						err.(*net.AddrError).Addr, err.(*net.AddrError).Err)
 				default:
-					metrics.AddUnknownError(1)
+					sender_metrics.AddUnknownError(1)
 					log.Printf("ERROR: Unexpected error: %#v", err)
 				}
 				continue
@@ -143,19 +142,19 @@ func ping(destinations chan *data.Destination, stopch chan bool, wg *sync.WaitGr
 			b, err := conn.WriteTo(echoRequest, &net.UDPAddr{IP: destAddr.IP})
 			if err != nil {
 				if v6 {
-					metrics.Addv6Failed(1)
+					sender_metrics.Addv6Failed(1)
 				} else {
-					metrics.Addv4Failed(1)
+					sender_metrics.Addv4Failed(1)
 				}
 				log.Printf("ERROR: %s", err)
 				continue
 			} else {
 				if v6 {
-					metrics.Addv6Sent(1)
-					metrics.Addv6Bytes(uint(b))
+					sender_metrics.Addv6Sent(1)
+					sender_metrics.Addv6Bytes(uint(b))
 				} else {
-					metrics.Addv4Sent(1)
-					metrics.Addv4Bytes(uint(b))
+					sender_metrics.Addv4Sent(1)
+					sender_metrics.Addv4Bytes(uint(b))
 				}
 			}
 

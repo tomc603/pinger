@@ -23,11 +23,9 @@ import (
 	"log"
 	"sync"
 	"time"
-
-	"github.com/tomc603/pinger/data"
 )
 
-func watchDestinations(db *sql.DB, destinations []*data.Destination, stopch chan bool, wg *sync.WaitGroup) {
+func watchDestinations(db *sql.DB, destinations []*Destination, stopch chan bool, wg *sync.WaitGroup) {
 	stop := false
 	t := time.NewTicker(time.Duration(DestInterval) * time.Second)
 
@@ -58,9 +56,9 @@ func watchDestinations(db *sql.DB, destinations []*data.Destination, stopch chan
 			// TODO: Add locking to Destination objects? Lock where Destination are tracked?
 			// TODO: This is easier if I just atomically changed what "destinations" points to.
 			// TODO: Stop deleted/inactive Destinations, Stop/Start modified Interval Destinations.
-			newDestinations := data.GetDestinations(db)
+			newDestinations := GetDestinations(db)
 			for _, newDestination := range newDestinations {
-				var foundDestination *data.Destination
+				var foundDestination *Destination
 				found := false
 
 				for _, destination := range destinations {

@@ -15,7 +15,7 @@
  *
  */
 
-package data
+package main
 
 import (
 	"bytes"

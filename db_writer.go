@@ -21,12 +21,10 @@ import (
 	"database/sql"
 	"log"
 	"sync"
-
-	"github.com/tomc603/pinger/data"
 )
 
-func resultWriter(resultchan chan data.Result, sqldb *sql.DB, wg *sync.WaitGroup) {
-	var resultBuf []*data.Result
+func resultWriter(resultchan chan Result, sqldb *sql.DB, wg *sync.WaitGroup) {
+	var resultBuf []*Result
 
 	wg.Add(1)
 	defer wg.Done()
@@ -38,29 +36,29 @@ func resultWriter(resultchan chan data.Result, sqldb *sql.DB, wg *sync.WaitGroup
 		if ResultBatchSize == 0 {
 			if ce := result.Commit(sqldb); ce != nil {
 				log.Printf("ERROR: Could not commit Result %#v. %s.\n", result, ce)
-				metrics.AddDbFailedSingleCommits(1)
+				listener_metrics.AddDbFailedSingleCommits(1)
 			} else {
-				metrics.AddDbSingleCommits(1)
+				listener_metrics.AddDbSingleCommits(1)
 			}
 		} else if len(resultBuf) >= ResultBatchSize {
-			if err := data.BatchResultWriter(resultBuf, sqldb); err != nil {
+			if err := BatchResultWriter(resultBuf, sqldb); err != nil {
 				// Commit each Result individually so we save as much data as possible.
 				log.Printf("ERROR: Could not commit Result batch. %s.\n", err)
-				metrics.AddDbFailedBatchCommits(1)
+				listener_metrics.AddDbFailedBatchCommits(1)
 				for _, r := range resultBuf {
 					if ce := r.Commit(sqldb); ce != nil {
 						log.Printf("ERROR: Could not commit Result %#v. %s.\n", r, ce)
-						metrics.AddDbFailedSingleCommits(1)
+						listener_metrics.AddDbFailedSingleCommits(1)
 					} else {
-						metrics.AddDbSingleCommits(1)
+						listener_metrics.AddDbSingleCommits(1)
 					}
 				}
 			} else {
-				metrics.AddDbBatchCommits(1)
+				listener_metrics.AddDbBatchCommits(1)
 			}
 
 			// Empty the result buffer.
-			resultBuf = []*data.Result{}
+			resultBuf = []*Result{}
 		} else {
 			resultBuf = append(resultBuf, &result)
 		}

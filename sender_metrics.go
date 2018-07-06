@@ -34,7 +34,7 @@ type DestinationMetrics struct {
 	addrError uint
 }
 
-type Metrics struct {
+type SenderMetrics struct {
 	sync.RWMutex
 	v4Sent       uint
 	v4Failed     uint
@@ -52,79 +52,79 @@ type Metrics struct {
 	destMetrics  map[string]DestinationMetrics
 }
 
-func (m *Metrics) Addv4Sent(delta uint) {
+func (m *SenderMetrics) Addv4Sent(delta uint) {
 	m.Lock()
 	m.v4Sent += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv4Failed(delta uint) {
+func (m *SenderMetrics) Addv4Failed(delta uint) {
 	m.Lock()
 	m.v4Failed += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv4Bytes(delta uint) {
+func (m *SenderMetrics) Addv4Bytes(delta uint) {
 	m.Lock()
 	m.v4Bytes += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv6Sent(delta uint) {
+func (m *SenderMetrics) Addv6Sent(delta uint) {
 	m.Lock()
 	m.v6Sent += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv6Failed(delta uint) {
+func (m *SenderMetrics) Addv6Failed(delta uint) {
 	m.Lock()
 	m.v6Failed += delta
 	m.Unlock()
 }
 
-func (m *Metrics) Addv6Bytes(delta uint) {
+func (m *SenderMetrics) Addv6Bytes(delta uint) {
 	m.Lock()
 	m.v6Bytes += delta
 	m.Unlock()
 }
 
-func (m *Metrics) AddEmptyDest(delta uint) {
+func (m *SenderMetrics) AddEmptyDest(delta uint) {
 	m.Lock()
 	m.emptyDest += delta
 	m.Unlock()
 }
 
-func (m *Metrics) AddDnsTimeout(delta uint) {
+func (m *SenderMetrics) AddDnsTimeout(delta uint) {
 	m.Lock()
 	m.dnsTimeout += delta
 	m.Unlock()
 }
 
-func (m *Metrics) AddDnsTempFail(delta uint) {
+func (m *SenderMetrics) AddDnsTempFail(delta uint) {
 	m.Lock()
 	m.dnsTempFail += delta
 	m.Unlock()
 }
 
-func (m *Metrics) AddDnsError(delta uint) {
+func (m *SenderMetrics) AddDnsError(delta uint) {
 	m.Lock()
 	m.dnsError += delta
 	m.Unlock()
 }
 
-func (m *Metrics) AddAddressError(delta uint) {
+func (m *SenderMetrics) AddAddressError(delta uint) {
 	m.Lock()
 	m.addrError += delta
 	m.Unlock()
 }
 
-func (m *Metrics) AddUnknownError(delta uint) {
+func (m *SenderMetrics) AddUnknownError(delta uint) {
 	m.Lock()
 	m.unknownError += delta
 	m.Unlock()
 }
 
-func (m *Metrics) String() string {
+func (m *SenderMetrics) String() string {
 	m.RLock()
 	defer m.RUnlock()
 	return fmt.Sprintf("Uptime: %v\n"+

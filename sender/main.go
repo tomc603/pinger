@@ -68,21 +68,20 @@ func main() {
 		log.Fatalf("ERROR: Results table could not be created. %s.\n", err)
 	}
 
-	// TODO: Put this in a Ticker controlled coroutine to watch for new, removed, and modified Destinations
-	destinations := data.GetDestinations(sqldb)
-	//destinations := []*data.Destination{
-	//	{Address: "google-public-dns-a.google.com", Protocol: data.ProtoUDP6, Interval: 1000, Data: []byte("TesTdaTa"), Active:true},
-	//	{Address: "www.yahoo.com", Protocol: data.ProtoUDP4, Interval: 5000, Data: []byte("teSTdaTA"), Active:true},
-	//	{Address: "www.amazon.com", Protocol: data.ProtoUDP4, Interval: 10000, Data: []byte("tEsTdATa"), Active:true},
-	//	{Address: "1.1.1.1", Protocol: data.ProtoUDP4, Interval: 2000, Data: []byte("tEsTdATa"), Active:false},
-	//}
-
 	statsTicker := &time.Ticker{}
 	if StatsInterval > 0 {
 		statsTicker = time.NewTicker(time.Duration(StatsInterval) * time.Second)
 	}
 
 	go ping(namech, stopch, &pingWG)
+
+	//destinations := []*data.Destination{
+	//	{Address: "google-public-dns-a.google.com", Protocol: data.ProtoUDP6, Interval: 1000, Data: []byte("TesTdaTa"), Active:true},
+	//	{Address: "www.yahoo.com", Protocol: data.ProtoUDP4, Interval: 5000, Data: []byte("teSTdaTA"), Active:true},
+	//	{Address: "www.amazon.com", Protocol: data.ProtoUDP4, Interval: 10000, Data: []byte("tEsTdATa"), Active:true},
+	//	{Address: "1.1.1.1", Protocol: data.ProtoUDP4, Interval: 2000, Data: []byte("tEsTdATa"), Active:false},
+	//}
+	destinations := data.GetDestinations(sqldb)
 	go watchDestinations(sqldb, destinations, stopch, &destWG)
 
 	for _, destination := range destinations {

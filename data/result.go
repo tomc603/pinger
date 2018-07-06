@@ -48,7 +48,7 @@ import (
 type Result struct {
 	TimeStamp   int64
 	Address     string
-	ID          int
+	Id          int
 	ReceiveSite uint32
 	ReceiveHost uint32
 	RTT         uint32
@@ -103,7 +103,7 @@ func (r *Result) String() string {
 			"Id: %d, Seq: %d\n"+
 			"Receive Site: %d, Receive Host: %d, RTT: %d\n"+
 			"DataMatch: %t\n",
-		r.ID,
+		r.Id,
 		time.Unix(0, r.TimeStamp),
 		r.Address,
 		r.Type,
@@ -174,7 +174,7 @@ func GetResults(db *sql.DB) []*Result {
 
 	for rows.Next() {
 		r := Result{}
-		err = rows.Scan(&r.ID, &r.TimeStamp, &r.Address, &r.ReceiveSite, &r.ReceiveHost, &r.RTT,
+		err = rows.Scan(&r.Id, &r.TimeStamp, &r.Address, &r.ReceiveSite, &r.ReceiveHost, &r.RTT,
 			&r.Type, &r.Code, &r.RequestID, &r.Sequence, &r.DataMatch)
 		if err != nil {
 			log.Printf("ERROR: querying Results. %s\n", err)

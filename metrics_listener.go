@@ -25,43 +25,15 @@ import (
 
 type ListenerMetrics struct {
 	sync.RWMutex
-	v4Sent                uint
-	v4ReceiveFailed       uint
-	v4ParseFailed         uint
-	v4Bytes               uint
-	v6Sent                uint
-	v6ReceiveFailed       uint
-	v6ParseFailed         uint
-	v6Bytes               uint
-	dbBatchCommits        uint
-	dbFailedBatchCommits  uint
-	dbSingleCommits       uint
-	dbFailedSingleCommits uint
-	startTime             time.Time
-}
-
-func (m *ListenerMetrics) AddDbBatchCommits(delta uint) {
-	m.Lock()
-	m.dbBatchCommits += delta
-	m.Unlock()
-}
-
-func (m *ListenerMetrics) AddDbFailedBatchCommits(delta uint) {
-	m.Lock()
-	m.dbFailedBatchCommits += delta
-	m.Unlock()
-}
-
-func (m *ListenerMetrics) AddDbSingleCommits(delta uint) {
-	m.Lock()
-	m.dbSingleCommits += delta
-	m.Unlock()
-}
-
-func (m *ListenerMetrics) AddDbFailedSingleCommits(delta uint) {
-	m.Lock()
-	m.dbFailedSingleCommits += delta
-	m.Unlock()
+	v4Sent          uint
+	v4ReceiveFailed uint
+	v4ParseFailed   uint
+	v4Bytes         uint
+	v6Sent          uint
+	v6ReceiveFailed uint
+	v6ParseFailed   uint
+	v6Bytes         uint
+	startTime       time.Time
 }
 
 func (m *ListenerMetrics) Addv4Received(delta uint) {

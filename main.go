@@ -54,13 +54,14 @@ const (
 var (
 	// TODO: Make StatsInterval a config parameter.
 	// TODO: Make ResultBatchSize a config parameter. If 0, do not batch results.
-	DataOrder binary.ByteOrder = binary.LittleEndian
-	DestInterval               = 60
-	MagicV1 Magic              = 146
-	listener_metrics           = new(ListenerMetrics)
-	ResultBatchSize            = 10
-	sender_metrics             = new(SenderMetrics)
-	StatsInterval              = 60
+	DataOrder        binary.ByteOrder = binary.LittleEndian
+	db_metrics                        = new(DbMetrics)
+	DestInterval                      = 60
+	MagicV1          Magic            = 146
+	listener_metrics                  = new(ListenerMetrics)
+	ResultBatchSize                   = 10
+	sender_metrics                    = new(SenderMetrics)
+	StatsInterval                     = 60
 )
 
 //destinations := []*Destination{
@@ -70,7 +71,7 @@ var (
 //	{Address: "1.1.1.1", Protocol: ProtoUDP4, Interval: 2000, Data: []byte("tEsTdATa"), Active:false},
 //}
 
-func main()  {
+func main() {
 	stop := false
 
 	destWG := sync.WaitGroup{}
@@ -83,7 +84,6 @@ func main()  {
 	sigch := make(chan os.Signal, 5)
 	stopch := make(chan bool)
 
-
 	signal.Notify(sigch,
 		syscall.SIGHUP,
 		syscall.SIGINT,
@@ -94,7 +94,6 @@ func main()  {
 	if StatsInterval > 0 {
 		statsTicker = time.NewTicker(time.Duration(StatsInterval) * time.Second)
 	}
-
 
 	sqldb, err := sql.Open("sqlite3", DbPath)
 	if err != nil {

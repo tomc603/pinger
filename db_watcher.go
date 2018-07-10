@@ -56,10 +56,12 @@ func watchDestinations(db *sql.DB, destinations []*Destination, stopch chan bool
 			// TODO: Add locking to Destination objects? Lock where Destination are tracked?
 			// TODO: This is easier if I just atomically changed what "destinations" points to.
 			// TODO: Stop deleted/inactive Destinations, Stop/Start modified Interval Destinations.
+			db_metrics.AddDestinationReads(1)
 			newDestinations := GetDestinations(db)
 			for _, newDestination := range newDestinations {
 				var foundDestination *Destination
 				found := false
+				modified := false
 
 				for _, destination := range destinations {
 					if newDestination.Id == destination.Id {
@@ -74,38 +76,50 @@ func watchDestinations(db *sql.DB, destinations []*Destination, stopch chan bool
 					// TODO: We need to Start() the new Destination, which requires channels
 					log.Printf("INFO: New Destination: %s\n", newDestination.Address)
 					destinations = append(destinations, newDestination)
+					db_metrics.AddAddedDestinations(1)
 				} else {
 					if foundDestination.Address != newDestination.Address {
 						log.Printf("INFO: Updating Id %d Address: %s\n", newDestination.Id, newDestination.Address)
+						modified = true
 						foundDestination.Address = newDestination.Address
 					}
 					if foundDestination.Interval != newDestination.Interval {
 						log.Printf("INFO: Updating Id %d Interval: %d\n", newDestination.Id, newDestination.Interval)
+						modified = true
 						foundDestination.Interval = newDestination.Interval
 					}
 					if foundDestination.TTL != newDestination.TTL {
 						log.Printf("INFO: Updating Id %d TTL: %d\n", newDestination.Id, newDestination.TTL)
+						modified = true
 						foundDestination.TTL = newDestination.TTL
 					}
 					if foundDestination.Timeout != newDestination.Timeout {
 						log.Printf("INFO: Updating Id %d Timeout: %d\n", newDestination.Id, newDestination.Timeout)
+						modified = true
 						foundDestination.Timeout = newDestination.Timeout
 					}
 					if foundDestination.Protocol != newDestination.Protocol {
 						log.Printf("INFO: Updating Id %d Protocol: %d\n", newDestination.Id, newDestination.Protocol)
+						modified = true
 						foundDestination.Protocol = newDestination.Protocol
 					}
 					if foundDestination.Active != newDestination.Active {
 						log.Printf("INFO: Updating Id %d Active: %t\n", newDestination.Id, newDestination.Active)
+						modified = true
 						foundDestination.Active = newDestination.Active
-						if ! foundDestination.Active {
+						if !foundDestination.Active {
 							// TODO: Delete inactive items from the destinations slice
 							foundDestination.Stop()
 						}
 					}
-					if ! bytes.Equal(foundDestination.Data, newDestination.Data) {
+					if !bytes.Equal(foundDestination.Data, newDestination.Data) {
 						log.Printf("INFO: Updating Id %d Payload\n", newDestination.Id)
+						modified = true
 						foundDestination.Data = newDestination.Data
+					}
+
+					if modified {
+						db_metrics.AddModifiedDestinationReads(1)
 					}
 				}
 			}
@@ -124,6 +138,7 @@ func watchDestinations(db *sql.DB, destinations []*Destination, stopch chan bool
 
 				if !found {
 					log.Printf("INFO: Deleting Id %d: %s\n", destination.Id, destination.Address)
+					db_metrics.AddRemovedDestinations(1)
 					destination.Stop()
 					destinations = append(destinations[:pos], destinations[pos+1:]...)
 					// We have to restart the check every time we delete and item,

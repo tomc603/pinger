@@ -25,32 +25,33 @@ import (
 	"time"
 )
 
-/*
- * Destinations - Database table 'destinations', used to store probe endpoints and parameters.
- * The 'active' field is used to determine whether or not a destination should be
- * probed or skipped during the probe loop.
- * TODO: Potential optimization- Select Destinations where active is true only.
- *
- * The 'address' field is not unique, and should not be collapsed into single
- * Destination instances when read from the database since parameters could be
- * different in each record.
- *
- * 'protocol' should be one of the constants Proto*, which leaves room for future types.
- *
- * An 'interval' is specified in milliseconds, and we should probably define a minimum to
- * make sure probes aren't abused.
- *
- * Currently, 'timeout' is not enforced since there's no good way to inform a listener
- * that a probe has been sent, or that a received probe should be ignored or marked as late.
- *
- * The 'ttl' field isn't enforced currently. When it is, it may be null, which means we
- * shouldn't specify a value to the probe sender. Otherwise, this specifies the hop limit
- * for a probe.
- * TODO: Enforce TTL if specified.
- *
- * 'data' is a BLOB ([]byte) field that contains the exact data to be placed into a probe's
- * payload. If the field is NULL, we shouldn't populate the payload at all.
- */
+// Destination
+// Database table 'destinations', is used to store probe endpoints and parameters.
+// The 'active' field is used to determine whether or not a destination should be
+// probed or skipped during the probe loop.
+// TODO: Potential optimization- Select Destinations where active is true only.
+//
+// The 'address' field is not unique, and should not be collapsed into single
+// Destination instances when read from the database since parameters could be
+// different in each record.
+//
+// 'protocol' should be one of the constants Proto*, which leaves room for future types.
+//
+// An 'interval' is specified in milliseconds, and we should probably define a minimum to
+// make sure probes aren't abused.
+//
+// Currently, 'timeout' is not enforced since there's no good way to inform a listener
+// that a probe has been sent, or that a received probe should be ignored or marked as late.
+//
+// The 'ttl' field isn't enforced currently. When it is, it may be null, which means we
+// shouldn't specify a value to the probe sender. Otherwise, this specifies the hop limit
+// for a probe.
+// TODO: Enforce TTL if specified.
+//
+// 'data' is a BLOB ([]byte) field that contains the exact data to be placed into a probe's
+// payload. If the field is NULL, we shouldn't populate the payload at all.
+//
+
 type Destination struct {
 	ticker   *time.Ticker
 	Id       int
@@ -179,7 +180,7 @@ func CreateDestinationsTable(db *sql.DB) error {
 
 func GetDestinations(db *sql.DB) []*Destination {
 	var destinations []*Destination
-	sqlstmnt := `SELECT id, active, address, protocol, interval, timeout, ttl, data FROM destinations`
+	sqlstmnt := `SELECT id, active, address, protocol, interval, timeout, ttl, data FROM destinations WHERE active = true`
 
 	rows, err := db.Query(sqlstmnt)
 	if err != nil {
@@ -219,7 +220,7 @@ func GetDestinations(db *sql.DB) []*Destination {
 		}
 
 		if d.Interval < MinProbeInterval {
-			log.Printf("WARN: Id %d: Destination %s interval too low. Using minimum %d.\n", d.Id, d.Id, d.Address, MinProbeInterval)
+			log.Printf("WARN: Id %d: Destination %s interval too low. Using minimum %d.\n", d.Id, d.Address, MinProbeInterval)
 			d.Interval = MinProbeInterval
 		}
 
@@ -227,7 +228,7 @@ func GetDestinations(db *sql.DB) []*Destination {
 			log.Printf("WARN: Id %d: Destination %s TTL %d too small. Using minimum %d.\n", d.Id, d.Address, d.TTL, MinProbeTTL)
 			d.TTL = MinProbeTTL
 		} else if d.TTL > MaxProbeTTL {
-			log.Printf("WARN: Id %d: Destination %s TTL %d too large. Using maximum %d.\n", d.Address, d.TTL, MaxProbeTTL)
+			log.Printf("WARN: Id %d: Destination %s TTL %d too large. Using maximum %d.\n", d.Id, d.Address, d.TTL, MaxProbeTTL)
 			d.TTL = MaxProbeTTL
 		}
 

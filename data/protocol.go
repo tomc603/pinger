@@ -23,27 +23,29 @@ import (
 	"log"
 )
 
-/*
- * Body - This is an echo request/reply body, which can be marshalled and
- * unmarshalled in a friendly way using the 'binary' package.
- *
- * 'Magic' - A uint8 magic value used to verify we have received the data we expect
- * in a format we understand. If 'Magic' is incorrect, processing the data should
- * stop immediately. Magic is not part of the Body struct, and must be
- * validated separately.
- *
- * 'Timestamp' - A int64 representation of a nanoseconds Unix timestamp
- *
- * 'Site' - The site ID that sent the probe request
- *
- * 'Host' - The host ID that sent the probe request
- */
+// Body
+// This is an echo request/reply body, which can be marshalled and
+// unmarshalled in a friendly way using the 'binary' package.
+//
+// Timestamp
+// An int64 representation of a nanoseconds Unix timestamp
+//
+// Site
+// The site ID that sent the probe request
+//
+// Host
+// The host ID that sent the probe request
 type Body struct {
 	Timestamp int64
 	Site      uint32
 	Host      uint32
 }
 
+// Magic
+// A uint8 magic value used to verify we have received the data we expect
+// in a format we understand. If 'Magic' is incorrect, processing the data should
+// stop immediately. Magic is not part of the Body struct, and must be
+// validated separately.
 type Magic uint8
 
 func (r *Body) Decode(data []byte) error {

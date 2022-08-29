@@ -13,24 +13,25 @@ import (
 	"github.com/tomc603/pinger/data"
 )
 
+// TODO: Read SenderID, SiteID, and DbPath from the config file, environment, or command line.
+//
+//	They should match values in the Senders table.
+//
+// TODO: Make DbPath a DSN.
 const (
-	// TODO: Make SenderID & SiteID config parameters. They should match values in the Senders table.
-	// TODO: Make DbPath a DSN, and a config parameter.
-	SenderID = 121
-	SiteID   = 101
-	DbPath   = "/Users/tcameron/pinger.sqlite3"
+	SenderID = 121                              // Read this value from the config file, environment, or command line
+	SiteID   = 101                              // Read this value from the config file, environment, or command line
+	DbPath   = "/Users/tcameron/pinger.sqlite3" // Read this value from the config file, environment, or command line
 )
 
+// TODO: Read StatsInterval from the config file, environment, or command line.
 var (
-	// TODO: Make StatsInterval a config parameter.
 	StatsInterval = 60
 	DestInterval  = 60
 	metrics       = new(Metrics)
 )
 
-/*
- * TODO: Add functions for other types of probe than ICMP.
-*/
+// TODO: Add functions for other types of probe than ICMP.
 func main() {
 	var stop = false
 
